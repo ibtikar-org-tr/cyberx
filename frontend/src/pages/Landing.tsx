@@ -127,14 +127,23 @@ export default function Landing() {
 
         {/* Start Demo Button */}
         <div className="text-center">
-          <button
-            onClick={handleStartDemo}
-            className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-lg font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!consentChecked}
-          >
-            <LogIn size={24} />
-            Start Demo
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button
+              onClick={handleStartDemo}
+              className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-lg font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!consentChecked}
+            >
+              <LogIn size={24} />
+              Start Demo
+            </button>
+            <button
+              onClick={() => navigate('/access')}
+              className="flex items-center justify-center gap-2 px-8 py-4 bg-white text-purple-700 border border-purple-200 text-lg font-bold rounded-lg hover:bg-purple-50 transition"
+            >
+              <Shield size={24} />
+              Access Page
+            </button>
+          </div>
           {!consentChecked && (
             <p className="text-sm text-gray-600 mt-2">
               Please accept the consent agreement to proceed
