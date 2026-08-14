@@ -11,6 +11,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 // Enable CORS
 app.use('*', cors());
+app.basePath('/ms/cyberx');
 
 // Middleware for authentication
 const authMiddleware = (c: any, next: any) => {
