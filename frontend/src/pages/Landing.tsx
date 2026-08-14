@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { Shield, LogIn, Lock } from 'lucide-react';
+import { Github, Shield, LogIn, Lock } from 'lucide-react';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -26,7 +26,16 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
       {/* Admin Login Button */}
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        <a
+          href="https://github.com/ibtikar-org-tr/cyberx"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-white text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+        >
+          <Github size={20} />
+          Source Code
+        </a>
         <button
           onClick={() => navigate('/admin/login')}
           className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition"
@@ -161,6 +170,15 @@ export default function Landing() {
           <p>
             🎓 Educational Tool | 📊 Data Processing Visible | 🔐 No Illegal Use | ✅ Full Consent Required
           </p>
+          <a
+            href="https://github.com/ibtikar-org-tr/cyberx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-2 text-purple-700 hover:underline"
+          >
+            <Github size={16} />
+            View source on GitHub
+          </a>
         </div>
       </div>
     </div>
