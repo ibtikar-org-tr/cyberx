@@ -146,6 +146,7 @@ export default function AdminDashboard() {
     }, { replace: true });
   };
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
   const [sessionFilter, setSessionFilter] = useState('all');
@@ -220,12 +221,17 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteAllData = async () => {
+    if (isDeletingAll) {
+      return;
+    }
+
     if (!deleteConfirm) {
       setDeleteConfirm(true);
       return;
     }
 
     const token = localStorage.getItem('adminToken');
+    setIsDeletingAll(true);
     try {
       const response = await fetch(getApiUrl('/api/admin/all-data'), {
         method: 'DELETE',
@@ -244,6 +250,8 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Delete failed:', error);
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -762,18 +770,26 @@ export default function AdminDashboard() {
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <button
+              type="button"
               onClick={() => void handleDeleteAllData()}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition ${
+              disabled={isDeletingAll}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-70 ${
                 deleteConfirm ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800'
               }`}
             >
-              <Trash2 size={16} />
-              {deleteConfirm ? 'Confirm delete all' : 'Delete all data'}
+              {isDeletingAll ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+              {isDeletingAll ? 'Deleting...' : deleteConfirm ? 'Confirm delete all' : 'Delete all data'}
             </button>
             {deleteConfirm && (
               <button
+                type="button"
                 onClick={() => setDeleteConfirm(false)}
-                className="rounded-lg bg-white px-4 py-2.5 text-sm text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
+                disabled={isDeletingAll}
+                className="rounded-lg bg-white px-4 py-2.5 text-sm text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-70"
               >
                 Cancel
               </button>
