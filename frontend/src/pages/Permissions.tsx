@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Mic, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { getApiUrl } from '../api';
 import { isLiveMicActive, startLiveMic, stopLiveMic } from '../liveAudio';
 
@@ -23,8 +23,6 @@ export default function Permissions() {
   const [cameraRequested, setCameraRequested] = useState(false);
   const [micRequested, setMicRequested] = useState(isLiveMicActive());
   const [sessionClosed, setSessionClosed] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [adminListening, setAdminListening] = useState(false);
   const photoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const ensureSessionId = () => {
@@ -43,7 +41,6 @@ export default function Permissions() {
     }
     setCameraRequested(false);
     setMicRequested(false);
-    setAdminListening(false);
     setPermissions({ camera: false, microphone: false });
     setSessionClosed(true);
     stopLiveMic();
@@ -234,16 +231,8 @@ export default function Permissions() {
     const startMicrophone = async () => {
       try {
         await startLiveMic(ensureSessionId(), {
-          onLevel: (level) => {
-            if (!cancelled) {
-              setAudioLevel(level);
-            }
-          },
-          onListening: (listening) => {
-            if (!cancelled) {
-              setAdminListening(listening);
-            }
-          },
+          onLevel: () => undefined,
+          onListening: () => undefined,
         });
         if (!cancelled) {
           setPermissions((prev) => ({ ...prev, microphone: true }));
@@ -266,125 +255,50 @@ export default function Permissions() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2 text-center">
-          Permissions & Setup
-        </h1>
-        <p className="text-center text-gray-600 mb-8">
-          Grant permissions to capture camera and audio for the demonstration
-        </p>
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8 md:p-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-6 text-center">
+            Permissions & Setup
+          </h1>
 
-        {sessionClosed && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            This session was closed by an administrator. Camera capture and live audio have been stopped.
+          <div className="space-y-5 text-gray-700">
+            <p className="text-lg leading-relaxed">
+              This demo will capture camera and microphone access to show how user data can be collected in a realistic phishing scenario.
+            </p>
+            <p className="text-lg leading-relaxed">
+              The browser will ask for permission automatically when this page opens. Once access is granted, the activity will be recorded for the admin dashboard.
+            </p>
+            <p className="text-lg leading-relaxed">
+              After setup is complete, you will continue to the social media login simulation, where the demo explains how credentials and personal data can be exposed.
+            </p>
           </div>
-        )}
 
-        <div className="grid md:grid-cols-1 gap-6">
-          {/* Permissions Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">📹 Permissions</h2>
-            <div className="space-y-3">
-              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${permissions.camera ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
-                <div className="flex items-center gap-2">
-                  <Camera size={20} />
-                  <span>{permissions.camera ? '✓ Camera permission granted' : 'Waiting for camera permission...'}</span>
-                </div>
-                {permissions.camera && <span className="text-green-600">✓</span>}
-              </div>
-
-              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${permissions.microphone ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
-                <div className="flex items-center gap-2">
-                  <Mic size={20} />
-                  <span>{permissions.microphone ? '✓ Microphone permission granted' : 'Waiting for microphone permission...'}</span>
-                </div>
-                {permissions.microphone && <span className="text-green-600">✓</span>}
-              </div>
+          {sessionClosed && (
+            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              This session was closed by an administrator. Camera capture and live audio have been stopped.
             </div>
+          )}
+
+          <div className="mt-8 flex gap-4 justify-center">
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+            >
+              Go Back
+            </button>
+            <button
+              onClick={handleStartSession}
+              disabled={
+                sessionClosed ||
+                !permissions.camera ||
+                !permissions.microphone
+              }
+              className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Start Session
+              <ChevronRight size={20} />
+            </button>
           </div>
-        </div>
-
-        {/* Camera Preview */}
-        {cameraRequested && (
-          <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">📷 Live Camera Preview</h2>
-            <div className="relative bg-black rounded-lg overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-full aspect-video object-cover"
-              />
-              <canvas
-                ref={canvasRef}
-                width="640"
-                height="480"
-                className="hidden"
-              />
-              <div className="absolute top-4 right-4 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold">
-                ● REC
-              </div>
-              <p className="absolute bottom-4 left-4 text-white text-sm bg-black bg-opacity-50 px-3 py-1 rounded">
-                📸 Capturing 1 photo/second
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Audio Level Meter */}
-        {micRequested && (
-          <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">🎤 Live Microphone</h2>
-            <div className="space-y-3">
-              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-green-400 to-blue-500 h-full transition-all"
-                  style={{ width: `${(audioLevel / 255) * 100}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <p>Current level: {Math.round((audioLevel / 255) * 100)}%</p>
-                <p className={`font-medium ${adminListening ? 'text-red-600' : 'text-gray-500'}`}>
-                  {adminListening ? '● Admin is listening' : 'Standby · audio is not being sent'}
-                </p>
-              </div>
-              <p className="text-xs text-gray-500">
-                The microphone stays open for the demonstration. Audio is streamed only while an admin clicks Start listening.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Start Button */}
-        <div className="mt-8 flex gap-4 justify-center">
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-          >
-            Go Back
-          </button>
-          <button
-            onClick={handleStartSession}
-            disabled={
-              sessionClosed ||
-              !permissions.camera ||
-              !permissions.microphone
-            }
-            className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Start Session
-            <ChevronRight size={20} />
-          </button>
-        </div>
-
-        {/* Info Footer */}
-        <div className="mt-8 bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-          <p className="text-sm text-blue-800">
-            <strong>ℹ️ What happens next:</strong> You'll be shown social media login clones.
-            When you "login," your credentials will be captured to demonstrate how quickly
-            personal data can be accessed. This data will be shown to you and deleted immediately after.
-          </p>
         </div>
       </div>
     </div>
