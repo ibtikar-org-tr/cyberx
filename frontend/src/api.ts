@@ -3,7 +3,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8787').r
 
 export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const normalizedPath = cleanPath.startsWith('/ms/cyberz') ? cleanPath : `/ms/cyberz${cleanPath}`;
+  const normalizedPath = cleanPath.startsWith('/ms/cyberx') ? cleanPath : `/ms/cyberx${cleanPath}`;
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
