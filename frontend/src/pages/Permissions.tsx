@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
 import { getApiUrl } from '../api';
 import { isLiveMicActive, startLiveMic, stopLiveMic } from '../liveAudio';
 
@@ -8,17 +7,6 @@ export default function Permissions() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const [allConsents] = useState({
-    understand: true,
-    camera: true,
-    microphone: true,
-  });
-
-  const [permissions, setPermissions] = useState({
-    camera: false,
-    microphone: false,
-  });
 
   const [cameraRequested, setCameraRequested] = useState(false);
   const [micRequested, setMicRequested] = useState(isLiveMicActive());
@@ -41,7 +29,6 @@ export default function Permissions() {
     }
     setCameraRequested(false);
     setMicRequested(false);
-    setPermissions({ camera: false, microphone: false });
     setSessionClosed(true);
     stopLiveMic();
   };
@@ -94,39 +81,6 @@ export default function Permissions() {
     const photoData = canvas.toDataURL('image/png');
     sessionStorage.setItem('lastPhotoData', photoData);
     void uploadPhotoToServer(photoData);
-  };
-
-  const handleStartSession = async () => {
-    if (sessionClosed) {
-      alert('This session was closed by an administrator');
-      return;
-    }
-
-    if (!permissions.camera || !permissions.microphone) {
-      alert('Please enable camera and microphone');
-      return;
-    }
-
-    const sessionId = ensureSessionId();
-
-    try {
-      const response = await fetch(getApiUrl('/api/sessions/create'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          consent: allConsents,
-        }),
-      });
-
-      if (response.ok) {
-        navigate('/demo/instagram');
-      }
-    } catch (error) {
-      console.error('Failed to create session:', error);
-      // Proceed anyway for offline mode
-      navigate('/demo/instagram');
-    }
   };
 
   useEffect(() => {
@@ -194,8 +148,6 @@ export default function Permissions() {
           await videoRef.current.play().catch(() => undefined);
         }
 
-        setPermissions((prev) => ({ ...prev, camera: true }));
-
         if (photoIntervalRef.current) {
           clearInterval(photoIntervalRef.current);
         }
@@ -235,7 +187,6 @@ export default function Permissions() {
           onListening: () => undefined,
         });
         if (!cancelled) {
-          setPermissions((prev) => ({ ...prev, microphone: true }));
         }
       } catch (error) {
         if (!cancelled) {
@@ -293,24 +244,13 @@ export default function Permissions() {
             </div>
           )}
 
-          <div className="mt-8 flex gap-4 justify-center">
+          <div className="mt-8 flex justify-center">
             <button
+              type="button"
               onClick={() => navigate('/')}
-              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+              className="text-blue-700 hover:text-blue-900 underline underline-offset-4 font-medium"
             >
-              Go Back
-            </button>
-            <button
-              onClick={handleStartSession}
-              disabled={
-                sessionClosed ||
-                !permissions.camera ||
-                !permissions.microphone
-              }
-              className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Start Session
-              <ChevronRight size={20} />
+              Go back
             </button>
           </div>
         </div>
