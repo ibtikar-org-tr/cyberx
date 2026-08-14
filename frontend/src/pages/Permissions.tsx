@@ -19,26 +19,24 @@ export default function Permissions() {
     microphone: false,
   });
 
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [cameraRequested, setCameraRequested] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
+  const photoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const requestCameraPermission = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setStream(mediaStream);
-      setPermissions((prev) => ({ ...prev, camera: true }));
-      startPhotoCaptureLoop();
-    } catch (error) {
-      console.error('Camera permission denied:', error);
-      alert('Camera permission was denied');
+  const ensureSessionId = () => {
+    let sessionId = sessionStorage.getItem('sessionId');
+    if (!sessionId) {
+      sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      sessionStorage.setItem('sessionId', sessionId);
     }
+    return sessionId;
+  };
+
+  const requestCameraPermission = () => {
+    ensureSessionId();
+    setCameraRequested(true);
   };
 
   const requestMicrophonePermission = async () => {
@@ -71,13 +69,10 @@ export default function Permissions() {
   };
 
   const uploadPhotoToServer = async (photoData: string) => {
-    const sessionId = sessionStorage.getItem('sessionId');
-    if (!sessionId) {
-      return;
-    }
+    const sessionId = ensureSessionId();
 
     try {
-      await fetch(getApiUrl('/api/media/photos'), {
+      const response = await fetch(getApiUrl('/api/media/photos'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -86,26 +81,36 @@ export default function Permissions() {
           timestamp: new Date().toISOString(),
         }),
       });
+
+      if (!response.ok) {
+        console.error('Failed to upload captured photo:', response.status);
+      }
     } catch (error) {
       console.error('Failed to upload captured photo:', error);
     }
   };
 
-  const startPhotoCaptureLoop = () => {
-    // Capture and upload one photo per second
-    const photoInterval = setInterval(() => {
-      if (canvasRef.current && videoRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, 640, 480);
-          const photoData = canvasRef.current.toDataURL('image/png');
-          sessionStorage.setItem('lastPhotoData', photoData);
-          void uploadPhotoToServer(photoData);
-        }
-      }
-    }, 1000);
+  const capturePhotoFrame = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0) {
+      return;
+    }
 
-    return () => clearInterval(photoInterval);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photoData = canvas.toDataURL('image/png');
+    sessionStorage.setItem('lastPhotoData', photoData);
+    void uploadPhotoToServer(photoData);
   };
 
   const handleStartSession = async () => {
@@ -119,9 +124,7 @@ export default function Permissions() {
       return;
     }
 
-    // Create session in backend
-    const sessionId = sessionStorage.getItem('sessionId') || Date.now().toString();
-    sessionStorage.setItem('sessionId', sessionId);
+    const sessionId = ensureSessionId();
 
     try {
       const response = await fetch(getApiUrl('/api/sessions/create'), {
@@ -144,15 +147,67 @@ export default function Permissions() {
   };
 
   useEffect(() => {
+    ensureSessionId();
+  }, []);
+
+  useEffect(() => {
+    if (!cameraRequested) {
+      return;
+    }
+
+    let cancelled = false;
+    let mediaStream: MediaStream | null = null;
+
+    const startCamera = async () => {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        });
+
+        if (cancelled) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+
+        setPermissions((prev) => ({ ...prev, camera: true }));
+
+        if (photoIntervalRef.current) {
+          clearInterval(photoIntervalRef.current);
+        }
+        photoIntervalRef.current = setInterval(capturePhotoFrame, 1000);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Camera permission denied:', error);
+          alert('Camera permission was denied');
+          setCameraRequested(false);
+        }
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      cancelled = true;
+      if (photoIntervalRef.current) {
+        clearInterval(photoIntervalRef.current);
+        photoIntervalRef.current = null;
+      }
+      mediaStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [cameraRequested]);
+
+  useEffect(() => {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
     };
-  }, [stream]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-8 px-4">
@@ -249,13 +304,14 @@ export default function Permissions() {
         </div>
 
         {/* Camera Preview */}
-        {permissions.camera && (
+        {cameraRequested && (
           <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">📷 Live Camera Preview</h2>
             <div className="relative bg-black rounded-lg overflow-hidden">
               <video
                 ref={videoRef}
                 autoPlay
+                muted
                 playsInline
                 className="w-full aspect-video object-cover"
               />

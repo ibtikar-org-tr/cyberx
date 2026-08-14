@@ -242,7 +242,6 @@ api.post('/api/media/photos', async (c) => {
 
   try {
     const sessionId = session_id || `access_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    await initDatabase(db);
 
     await db
       .prepare(
@@ -253,7 +252,12 @@ api.post('/api/media/photos', async (c) => {
       .run();
 
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const storedPhoto = await persistPhotoToR2(c.env, sessionId, photo_data, 'access');
+    let storedPhoto: Awaited<ReturnType<typeof persistPhotoToR2>> = null;
+    try {
+      storedPhoto = await persistPhotoToR2(c.env, sessionId, photo_data, 'access');
+    } catch (photoError) {
+      console.log('Photo storage skipped', photoError);
+    }
 
     await db
       .prepare(
