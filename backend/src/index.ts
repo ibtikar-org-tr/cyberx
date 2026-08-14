@@ -15,7 +15,7 @@ const api = new Hono<{ Bindings: CloudflareBindings }>();
 app.use('*', cors());
 api.use('*', cors());
 
-const legacyRouteAliases = ['/ms/cyberz', '/ms/cybers'];
+const apiBasePath = '/ms/cyberx';
 
 const PHOTO_PREFIX = 'photos';
 
@@ -561,8 +561,6 @@ api.get('/', (c) => {
   return c.json({ message: 'CyberX Backend API', version: '1.0.0' });
 });
 
-for (const basePath of legacyRouteAliases) {
-  app.route(basePath, api);
-}
+app.route(apiBasePath, api);
 
 export default app;
