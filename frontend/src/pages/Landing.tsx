@@ -7,12 +7,12 @@ export default function Landing() {
   const [consentChecked, setConsentChecked] = useState(false);
 
   const demoApps = [
-    { id: 'instagram', name: 'Instagram', path: '/demo/instagram', icon: '📷' },
-    { id: 'facebook', name: 'Facebook', path: '/demo/facebook', icon: '👥' },
-    { id: 'twitter', name: 'Twitter/X', path: '/demo/twitter', icon: '𝕏' },
-    { id: 'linkedin', name: 'LinkedIn', path: '/demo/linkedin', icon: '💼' },
-    { id: 'gmail', name: 'Gmail', path: '/demo/gmail', icon: '✉️' },
-    { id: 'tiktok', name: 'TikTok', path: '/demo/tiktok', icon: '♪' },
+    { id: 'instagram', name: 'Instagram', path: '/instagram', icon: '📷' },
+    { id: 'facebook', name: 'Facebook', path: '/facebook', icon: '👥' },
+    { id: 'twitter', name: 'Twitter/X', path: '/twitter', icon: '𝕏' },
+    { id: 'linkedin', name: 'LinkedIn', path: '/linkedin', icon: '💼' },
+    { id: 'gmail', name: 'Gmail', path: '/gmail', icon: '✉️' },
+    { id: 'tiktok', name: 'TikTok', path: '/tiktok', icon: '♪' },
   ];
 
   const handleStartDemo = () => {
@@ -20,7 +20,7 @@ export default function Landing() {
       alert('Please accept the consent agreement to continue');
       return;
     }
-    navigate('/permissions');
+    navigate('/access');
   };
 
   return (
@@ -113,9 +113,8 @@ export default function Landing() {
                     alert('Please accept the consent agreement to continue');
                     return;
                   }
-                  // Store session and navigate
                   sessionStorage.setItem('sessionId', Date.now().toString());
-                  navigate('/permissions');
+                  navigate(app.path);
                 }}
                 className="p-4 bg-white rounded-lg shadow hover:shadow-lg transition transform hover:scale-105 text-center"
               >
