@@ -53,6 +53,23 @@ async function persistPhotoToR2(
   };
 }
 
+async function emptyBucket(bucket: R2Bucket) {
+  let deleted = 0;
+  let cursor: string | undefined;
+
+  do {
+    const listed = await bucket.list({ limit: 1000, cursor });
+    const keys = listed.objects.map((object) => object.key);
+    if (keys.length > 0) {
+      await bucket.delete(keys);
+      deleted += keys.length;
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  return deleted;
+}
+
 async function getSessionStatus(db: D1Database, sessionId: string) {
   const row = await db
     .prepare(`SELECT status FROM sessions WHERE id = ?`)
@@ -674,6 +691,8 @@ api.delete('/api/admin/all-data', async (c) => {
   }
 
   try {
+    const deletedObjects = await emptyBucket(c.env.BUCKET);
+
     await db.exec(`
       DELETE FROM credentials_captured;
       DELETE FROM photos;
@@ -682,8 +701,9 @@ api.delete('/api/admin/all-data', async (c) => {
       DELETE FROM admin_audit_log;
     `);
 
-    return c.json({ success: true, message: 'All data deleted' });
+    return c.json({ success: true, message: 'All data deleted', deletedObjects });
   } catch (error) {
+    console.error('Failed to delete all data:', error);
     return c.json({ error: 'Failed to delete all data' }, 500);
   }
 });
