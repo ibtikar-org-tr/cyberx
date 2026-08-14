@@ -11,7 +11,8 @@
     {
       "binding": "DB",
       "database_name": "cyberx-db",
-      "database_id": "local-db"
+      "database_id": "local-db",
+      "migrations_dir": "../database/migrations"
     }
   ],
   "r2_buckets": [

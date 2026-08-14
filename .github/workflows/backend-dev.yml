@@ -6,6 +6,7 @@ on:
       - dev
     paths:
       - 'backend/**'
+      - 'database/**'
       - '.github/workflows/backend-dev.yml'
   workflow_dispatch:
 
@@ -46,6 +47,12 @@ jobs:
             --arg frontendBaseUrl "${{ vars.FRONTEND_BASE_URL }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc
+
+      - name: Migrate D1 Databases
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          wrangler d1 migrations apply ${{ vars.CYBERX_DB_NAME }} --remote --config wrangler.local.jsonc
 
       - name: Deploy to Cloudflare Workers
         env:

