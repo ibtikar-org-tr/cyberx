@@ -18,6 +18,7 @@ api.use('*', cors());
 const apiBasePath = '/ms/cyberx';
 
 const PHOTO_PREFIX = 'photos';
+const AUDIO_PREFIX = 'audio';
 
 async function persistPhotoToR2(
   env: CloudflareBindings,
@@ -48,6 +49,37 @@ async function persistPhotoToR2(
       uploadedAt: new Date().toISOString(),
       sessionId: cleanSessionId,
     },
+  };
+}
+
+async function persistAudioToR2(
+  env: CloudflareBindings,
+  sessionId: string,
+  audioData: string,
+  chunkIndex: number
+) {
+  if (!audioData || !audioData.startsWith('data:audio/')) {
+    return null;
+  }
+
+  const mimeMatch = audioData.match(/^data:(audio\/[^;,]+)/);
+  const contentType = mimeMatch?.[1] || 'audio/webm';
+  const extension = contentType.includes('mp4') ? 'mp4' : 'webm';
+  const cleanSessionId = (sessionId || 'anonymous').replace(/[^a-zA-Z0-9_-]+/g, '_');
+  const objectKey = `${AUDIO_PREFIX}/${cleanSessionId}/chunk-${chunkIndex}-${Date.now()}.${extension}`;
+
+  const base64Data = audioData.includes(',') ? audioData.split(',')[1] : audioData;
+  const binary = Uint8Array.from(atob(base64Data), (char) => char.charCodeAt(0));
+
+  await env.BUCKET.put(objectKey, binary, {
+    httpMetadata: {
+      contentType,
+    },
+  });
+
+  return {
+    objectKey,
+    contentType,
   };
 }
 
@@ -315,25 +347,60 @@ api.post('/api/media/photos', async (c) => {
 
 api.post('/api/media/audio/chunk', async (c) => {
   const db = c.env.DB;
-  const { session_id, audio_data, chunk_index } = await c.req.json();
+  const payload = await c.req.json().catch(() => ({}));
+  const { session_id, audio_data, chunk_index, duration_ms } = payload;
 
   try {
-    const sessionStatus = await getSessionStatus(db, session_id);
-    if (sessionStatus && sessionStatus !== 'active') {
-      return sessionClosedResponse(c);
-    }
-    const audioId = `audio_${session_id}_${chunk_index}`;
+    const sessionId = session_id || `access_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
     await db
       .prepare(
-        `INSERT OR REPLACE INTO audio_recordings (id, session_id, recording_data, started_at)
-       VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
+        `INSERT OR IGNORE INTO sessions (id, consent_given, camera_permission, microphone_permission, client_ip, user_agent)
+       VALUES (?, 0, 0, 1, 'unknown', 'access-audio-upload')`
       )
-      .bind(audioId, session_id, audio_data.substring(0, 500))
+      .bind(sessionId)
       .run();
 
-    return c.json({ success: true });
+    const sessionStatus = await getSessionStatus(db, sessionId);
+    if (sessionStatus && sessionStatus !== 'active') {
+      return sessionClosedResponse(c);
+    }
+
+    const durationMs = Number(duration_ms) > 0 ? Number(duration_ms) : 5000;
+    const chunkIndex = Number.isFinite(Number(chunk_index)) ? Number(chunk_index) : Date.now();
+    const audioId = `audio_${Date.now()}_${chunkIndex}_${Math.random().toString(36).slice(2, 8)}`;
+
+    let storedAudio: Awaited<ReturnType<typeof persistAudioToR2>> = null;
+    try {
+      storedAudio = await persistAudioToR2(c.env, sessionId, audio_data, chunkIndex);
+    } catch (audioError) {
+      console.log('Audio storage skipped', audioError);
+    }
+
+    if (!storedAudio?.objectKey) {
+      return c.json({ error: 'Failed to store audio' }, 500);
+    }
+
+    await db
+      .prepare(
+        `INSERT INTO audio_recordings (id, session_id, recording_data, duration_ms, started_at, ended_at)
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      )
+      .bind(audioId, sessionId, storedAudio.objectKey, durationMs)
+      .run();
+
+    await db
+      .prepare(
+        `UPDATE sessions
+         SET audio_duration_ms = COALESCE(audio_duration_ms, 0) + ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+      .bind(durationMs, sessionId)
+      .run();
+
+    return c.json({ success: true, audioId, sessionId, objectKey: storedAudio.objectKey });
   } catch (error) {
+    console.error('Audio upload error:', error);
     return c.json({ error: 'Failed to upload audio' }, 500);
   }
 });
@@ -586,6 +653,73 @@ api.get('/api/admin/photos/:session_id', async (c) => {
   }
 });
 
+api.get('/api/admin/audio', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `SELECT id, session_id, duration_ms, started_at, ended_at
+         FROM audio_recordings
+         ORDER BY started_at DESC
+         LIMIT 200`
+      )
+      .all();
+    return c.json(result.results || []);
+  } catch (error) {
+    console.error('Failed to fetch audio:', error);
+    return c.json({ error: 'Failed to fetch audio' }, 500);
+  }
+});
+
+api.get('/api/admin/audio/:id/file', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '') || c.req.query('token');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const audioId = c.req.param('id');
+
+  try {
+    const recording = await db
+      .prepare(`SELECT recording_data FROM audio_recordings WHERE id = ?`)
+      .bind(audioId)
+      .first<{ recording_data: string | null }>();
+
+    if (!recording?.recording_data) {
+      return c.json({ error: 'Audio not found' }, 404);
+    }
+
+    const objectKey = recording.recording_data.startsWith(`${AUDIO_PREFIX}/`)
+      ? recording.recording_data
+      : null;
+
+    if (!objectKey) {
+      return c.json({ error: 'Audio file not found' }, 404);
+    }
+
+    const object = await c.env.BUCKET.get(objectKey);
+    if (!object) {
+      return c.json({ error: 'Audio file not found' }, 404);
+    }
+
+    return c.body(object.body, 200, {
+      'Content-Type': object.httpMetadata?.contentType || 'audio/webm',
+      'Cache-Control': 'private, max-age=300',
+    });
+  } catch (error) {
+    console.error('Failed to fetch audio file:', error);
+    return c.json({ error: 'Failed to fetch audio file' }, 500);
+  }
+});
+
 api.get('/api/admin/audio/:session_id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
@@ -625,6 +759,9 @@ api.get('/api/admin/analytics', async (c) => {
     const photos = await db
       .prepare(`SELECT COUNT(*) as count FROM photos`)
       .first();
+    const audio = await db
+      .prepare(`SELECT COALESCE(SUM(duration_ms), 0) as total FROM audio_recordings`)
+      .first<{ total: number }>();
 
     const credsByType = await db
       .prepare(
@@ -636,7 +773,7 @@ api.get('/api/admin/analytics', async (c) => {
       activeSessions: sessions?.count || 0,
       totalCredentials: credentials?.count || 0,
       totalPhotos: photos?.count || 0,
-      totalAudioMinutes: 0,
+      totalAudioMinutes: Number(((Number(audio?.total) || 0) / 60000).toFixed(1)),
       credentialsByPlatform: (credsByType.results || []).reduce(
         (acc: any, row: any) => {
           acc[row.demo_type] = row.count;

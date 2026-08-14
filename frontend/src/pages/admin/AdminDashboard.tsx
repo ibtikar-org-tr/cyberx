@@ -11,6 +11,7 @@ import {
   ImageOff,
   KeyRound,
   LogOut,
+  Mic,
   RefreshCw,
   Shield,
   Trash2,
@@ -27,10 +28,19 @@ type AdminPhoto = {
   capture_timestamp: string;
 };
 
+type AdminAudio = {
+  id: string;
+  session_id: string;
+  duration_ms: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+};
+
 const TABS = [
   { id: 'credentials', label: 'Credentials', icon: KeyRound },
   { id: 'sessions', label: 'Sessions', icon: Users },
   { id: 'photos', label: 'Photos', icon: Camera },
+  { id: 'audio', label: 'Audio', icon: Mic },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ] as const;
 
@@ -126,12 +136,63 @@ function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: strin
   return <img src={src} alt={alt} className="h-full w-full object-cover" />;
 }
 
+function AudioPlayer({ audioId, token }: { audioId: string; token: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const response = await fetch(getApiUrl(`/api/admin/audio/${audioId}/file`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load audio');
+        }
+        const blob = await response.blob();
+        if (cancelled) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      } catch {
+        if (!cancelled) {
+          setFailed(true);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [audioId, token]);
+
+  if (failed) {
+    return <p className="text-xs text-gray-500">Audio unavailable</p>;
+  }
+
+  if (!src) {
+    return <p className="text-xs text-gray-400">Loading audio...</p>;
+  }
+
+  return <audio controls src={src} className="w-full" />;
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [credentials, setCredentials] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [photos, setPhotos] = useState<AdminPhoto[]>([]);
+  const [recordings, setRecordings] = useState<AdminAudio[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -148,6 +209,7 @@ export default function AdminDashboard() {
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
   const [sessionFilter, setSessionFilter] = useState('all');
+  const [audioSessionFilter, setAudioSessionFilter] = useState('all');
   const [photoSort, setPhotoSort] = useState<PhotoSort>('newest');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
@@ -183,10 +245,11 @@ export default function AdminDashboard() {
     }
 
     try {
-      const [credResponse, sessResponse, photosResponse, analyticsResponse] = await Promise.all([
+      const [credResponse, sessResponse, photosResponse, audioResponse, analyticsResponse] = await Promise.all([
         fetch(getApiUrl('/api/admin/credentials'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/sessions'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/photos'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(getApiUrl('/api/admin/audio'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/analytics'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
@@ -199,6 +262,10 @@ export default function AdminDashboard() {
       if (photosResponse.ok) {
         const photosData = await photosResponse.json();
         setPhotos(Array.isArray(photosData) ? photosData : []);
+      }
+      if (audioResponse.ok) {
+        const audioData = await audioResponse.json();
+        setRecordings(Array.isArray(audioData) ? audioData : []);
       }
       if (analyticsResponse.ok) {
         setAnalytics(await analyticsResponse.json());
@@ -234,6 +301,7 @@ export default function AdminDashboard() {
         setCredentials([]);
         setSessions([]);
         setPhotos([]);
+        setRecordings([]);
         setAnalytics(null);
         setSelectedPhoto(null);
         setDeleteConfirm(false);
@@ -297,6 +365,19 @@ export default function AdminDashboard() {
   const sessionIds = useMemo(
     () => Array.from(new Set(photos.map((photo) => photo.session_id).filter(Boolean))),
     [photos]
+  );
+
+  const audioSessionIds = useMemo(
+    () => Array.from(new Set(recordings.map((recording) => recording.session_id).filter(Boolean))),
+    [recordings]
+  );
+
+  const visibleRecordings = useMemo(
+    () =>
+      audioSessionFilter === 'all'
+        ? recordings
+        : recordings.filter((recording) => recording.session_id === audioSessionFilter),
+    [recordings, audioSessionFilter]
   );
 
   const visiblePhotos = useMemo(() => {
@@ -432,7 +513,9 @@ export default function AdminDashboard() {
                     ? sessions.length
                     : tab.id === 'photos'
                       ? photos.length
-                      : Object.keys(platformCounts).length;
+                      : tab.id === 'audio'
+                        ? recordings.length
+                        : Object.keys(platformCounts).length;
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
 
@@ -650,6 +733,52 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 <EmptyState title="No photos captured yet" body="Grant camera access on /access to start collecting frames." />
+              )}
+            </div>
+          )}
+
+          {activeTab === 'audio' && (
+            <div className="p-4 md:p-6">
+              {recordings.length ? (
+                <>
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <label className="flex min-w-48 flex-col gap-1 text-xs font-medium text-gray-500">
+                      Filter by session
+                      <select
+                        value={audioSessionFilter}
+                        onChange={(event) => setAudioSessionFilter(event.target.value)}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
+                      >
+                        <option value="all">All sessions ({recordings.length})</option>
+                        {audioSessionIds.map((sessionId) => (
+                          <option key={sessionId} value={sessionId}>
+                            {sessionId.slice(-8)} ({recordings.filter((recording) => recording.session_id === sessionId).length})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="text-sm text-gray-500">{visibleRecordings.length} shown</p>
+                  </div>
+                  <div className="space-y-3">
+                    {visibleRecordings.map((recording) => (
+                      <div key={recording.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div>
+                            <p className="font-medium text-gray-900">Session {recording.session_id?.slice(-8)}</p>
+                            <p className="text-xs text-gray-500">{recording.session_id}</p>
+                          </div>
+                          <div className="text-right text-xs text-gray-500">
+                            <p>{Math.round((recording.duration_ms || 0) / 1000)}s clip</p>
+                            <p>{formatTime(recording.started_at || undefined)}</p>
+                          </div>
+                        </div>
+                        <AudioPlayer audioId={recording.id} token={adminToken} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <EmptyState title="No audio captured yet" body="Grant microphone access on /access to start recording 5-second clips." />
               )}
             </div>
           )}
