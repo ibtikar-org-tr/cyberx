@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { getApiUrl } from '../../api';
 
 export default function InstagramLogin() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export default function InstagramLogin() {
     const photoData = sessionStorage.getItem('lastPhotoData');
 
     try {
-      await fetch('/api/demo/instagram/login', {
+      await fetch(getApiUrl('/api/demo/instagram/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

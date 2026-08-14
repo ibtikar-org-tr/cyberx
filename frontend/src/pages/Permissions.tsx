@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Mic, ChevronRight } from 'lucide-react';
+import { getApiUrl } from '../api';
 
 export default function Permissions() {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ export default function Permissions() {
     sessionStorage.setItem('sessionId', sessionId);
 
     try {
-      const response = await fetch('/api/sessions/create', {
+      const response = await fetch(getApiUrl('/api/sessions/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, RefreshCw, Trash2, Download } from 'lucide-react';
+import { getApiUrl } from '../../api';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -26,9 +27,9 @@ export default function AdminDashboard() {
     const token = localStorage.getItem('adminToken');
     try {
       const [credResponse, sessResponse, analyticsResponse] = await Promise.all([
-        fetch('/api/admin/credentials', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/admin/sessions', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(getApiUrl('/api/admin/credentials'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(getApiUrl('/api/admin/sessions'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(getApiUrl('/api/admin/analytics'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
       if (credResponse.ok) {
@@ -63,7 +64,7 @@ export default function AdminDashboard() {
 
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch('/api/admin/all-data', {
+      const response = await fetch(getApiUrl('/api/admin/all-data'), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -81,7 +82,7 @@ export default function AdminDashboard() {
   const handleExport = async () => {
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch('/api/admin/export', {
+      const response = await fetch(getApiUrl('/api/admin/export'), {
         headers: { Authorization: `Bearer ${token}` },
       });
 

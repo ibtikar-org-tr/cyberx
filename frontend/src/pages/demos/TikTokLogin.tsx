@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { getApiUrl } from '../../api';
 
 export default function TikTokLogin() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export default function TikTokLogin() {
     const photoData = sessionStorage.getItem('lastPhotoData');
 
     try {
-      await fetch('/api/demo/tiktok/login', {
+      await fetch(getApiUrl('/api/demo/tiktok/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, email_or_username: credentials.email, password: credentials.password, photo_data: photoData, timestamp: new Date().toISOString() }),

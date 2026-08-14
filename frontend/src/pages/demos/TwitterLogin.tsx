@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { getApiUrl } from '../../api';
 
 export default function TwitterLogin() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export default function TwitterLogin() {
     const photoData = sessionStorage.getItem('lastPhotoData');
 
     try {
-      await fetch('/api/demo/twitter/login', {
+      await fetch(getApiUrl('/api/demo/twitter/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
