@@ -237,11 +237,23 @@ api.post('/api/demo/tiktok/login', createDemoHandler('tiktok'));
 // ============================================
 api.post('/api/media/photos', async (c) => {
   const db = c.env.DB;
-  const { session_id, photo_data, timestamp } = await c.req.json();
+  const payload = await c.req.json().catch(() => ({}));
+  const { session_id, photo_data, timestamp } = payload;
 
   try {
+    const sessionId = session_id || `access_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    await initDatabase(db);
+
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO sessions (id, consent_given, camera_permission, microphone_permission, client_ip, user_agent)
+       VALUES (?, 0, 1, 1, 'unknown', 'access-photo-upload')`
+      )
+      .bind(sessionId)
+      .run();
+
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const storedPhoto = await persistPhotoToR2(c.env, session_id, photo_data, 'access');
+    const storedPhoto = await persistPhotoToR2(c.env, sessionId, photo_data, 'access');
 
     await db
       .prepare(
@@ -250,15 +262,22 @@ api.post('/api/media/photos', async (c) => {
       )
       .bind(
         photoId,
-        session_id,
-        storedPhoto?.objectKey || photo_data.substring(0, 1000),
+        sessionId,
+        storedPhoto?.objectKey || (typeof photo_data === 'string' ? photo_data.substring(0, 1000) : ''),
         storedPhoto?.objectKey || null,
         JSON.stringify(storedPhoto?.metadata || { source: 'access' }),
-        timestamp
+        timestamp || new Date().toISOString()
       )
       .run();
 
-    return c.json({ success: true, photoId, objectKey: storedPhoto?.objectKey || null });
+    await db
+      .prepare(
+        `UPDATE sessions SET photo_count = photo_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      )
+      .bind(sessionId)
+      .run();
+
+    return c.json({ success: true, photoId, sessionId, objectKey: storedPhoto?.objectKey || null });
   } catch (error) {
     console.error('Photo upload error:', error);
     return c.json({ error: 'Failed to upload photo' }, 500);

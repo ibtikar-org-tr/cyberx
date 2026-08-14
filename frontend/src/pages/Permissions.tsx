@@ -70,16 +70,37 @@ export default function Permissions() {
     }
   };
 
+  const uploadPhotoToServer = async (photoData: string) => {
+    const sessionId = sessionStorage.getItem('sessionId');
+    if (!sessionId) {
+      return;
+    }
+
+    try {
+      await fetch(getApiUrl('/api/media/photos'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          photo_data: photoData,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to upload captured photo:', error);
+    }
+  };
+
   const startPhotoCaptureLoop = () => {
-    // Capture one photo per second
+    // Capture and upload one photo per second
     const photoInterval = setInterval(() => {
       if (canvasRef.current && videoRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, 640, 480);
           const photoData = canvasRef.current.toDataURL('image/png');
-          // Store photo ID for later association
           sessionStorage.setItem('lastPhotoData', photoData);
+          void uploadPhotoToServer(photoData);
         }
       }
     }, 1000);
