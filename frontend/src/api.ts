@@ -7,4 +7,8 @@ export function getApiUrl(path: string): string {
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
+export function getWsUrl(path: string): string {
+  return getApiUrl(path).replace(/^http/, 'ws');
+}
+
 export default API_BASE_URL;

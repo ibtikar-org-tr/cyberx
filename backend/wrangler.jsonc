@@ -20,5 +20,19 @@
       "binding": "BUCKET",
       "bucket_name": "cyberx-r2"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AUDIO_ROOM",
+        "class_name": "AudioRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AudioRoom"]
+    }
   ]
 }

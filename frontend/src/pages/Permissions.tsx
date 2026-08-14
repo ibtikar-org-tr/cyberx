@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Mic, ChevronRight } from 'lucide-react';
 import { getApiUrl } from '../api';
+import { isLiveMicActive, startLiveMic, stopLiveMic } from '../liveAudio';
 
 export default function Permissions() {
   const navigate = useNavigate();
@@ -20,14 +21,11 @@ export default function Permissions() {
   });
 
   const [cameraRequested, setCameraRequested] = useState(false);
-  const [micRequested, setMicRequested] = useState(false);
+  const [micRequested, setMicRequested] = useState(isLiveMicActive());
   const [sessionClosed, setSessionClosed] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [audioChunksUploaded, setAudioChunksUploaded] = useState(0);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationRef = useRef<number | null>(null);
+  const [adminListening, setAdminListening] = useState(false);
   const photoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioChunkIndexRef = useRef(0);
 
   const ensureSessionId = () => {
     let sessionId = sessionStorage.getItem('sessionId');
@@ -45,8 +43,10 @@ export default function Permissions() {
     }
     setCameraRequested(false);
     setMicRequested(false);
+    setAdminListening(false);
     setPermissions({ camera: false, microphone: false });
     setSessionClosed(true);
+    stopLiveMic();
   };
 
   const requestCameraPermission = () => {
@@ -63,55 +63,6 @@ export default function Permissions() {
     }
     ensureSessionId();
     setMicRequested(true);
-  };
-
-  const blobToDataUrl = (blob: Blob) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(String(reader.result || ''));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-  const uploadAudioChunk = async (audioData: string, durationMs: number) => {
-    const sessionId = ensureSessionId();
-
-    try {
-      const response = await fetch(getApiUrl('/api/media/audio/chunk'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          audio_data: audioData,
-          chunk_index: audioChunkIndexRef.current++,
-          duration_ms: durationMs,
-        }),
-      });
-
-      if (response.status === 409) {
-        stopCapture();
-        return;
-      }
-
-      if (!response.ok) {
-        console.error('Failed to upload audio chunk:', response.status);
-        return;
-      }
-
-      setAudioChunksUploaded((count) => count + 1);
-    } catch (error) {
-      console.error('Failed to upload audio chunk:', error);
-    }
-  };
-
-  const updateAudioLevel = () => {
-    if (analyserRef.current) {
-      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-      analyserRef.current.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-      setAudioLevel(average);
-      animationRef.current = requestAnimationFrame(updateAudioLevel);
-    }
   };
 
   const uploadPhotoToServer = async (photoData: string) => {
@@ -291,50 +242,29 @@ export default function Permissions() {
   }, [cameraRequested]);
 
   useEffect(() => {
-    if (!micRequested) {
+    if (!micRequested || sessionClosed) {
       return;
     }
 
     let cancelled = false;
-    let mediaStream: MediaStream | null = null;
-    let recorder: MediaRecorder | null = null;
-    let audioContext: AudioContext | null = null;
-    const chunkDurationMs = 5000;
 
     const startMicrophone = async () => {
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) {
-          mediaStream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioContext = new AudioContextClass();
-        const analyser = audioContext.createAnalyser();
-        const source = audioContext.createMediaStreamSource(mediaStream);
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        updateAudioLevel();
-
-        const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) =>
-          MediaRecorder.isTypeSupported(type)
-        );
-        recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
-
-        recorder.ondataavailable = (event) => {
-          if (cancelled || !event.data.size) {
-            return;
-          }
-          void blobToDataUrl(event.data).then((audioData) => {
-            if (!cancelled && audioData.startsWith('data:audio/')) {
-              void uploadAudioChunk(audioData, chunkDurationMs);
+        await startLiveMic(ensureSessionId(), {
+          onLevel: (level) => {
+            if (!cancelled) {
+              setAudioLevel(level);
             }
-          });
-        };
-
-        recorder.start(chunkDurationMs);
-        setPermissions((prev) => ({ ...prev, microphone: true }));
+          },
+          onListening: (listening) => {
+            if (!cancelled) {
+              setAdminListening(listening);
+            }
+          },
+        });
+        if (!cancelled) {
+          setPermissions((prev) => ({ ...prev, microphone: true }));
+        }
       } catch (error) {
         if (!cancelled) {
           console.error('Microphone permission denied:', error);
@@ -348,17 +278,8 @@ export default function Permissions() {
 
     return () => {
       cancelled = true;
-      if (recorder && recorder.state !== 'inactive') {
-        recorder.stop();
-      }
-      mediaStream?.getTracks().forEach((track) => track.stop());
-      void audioContext?.close();
-      analyserRef.current = null;
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
     };
-  }, [micRequested]);
+  }, [micRequested, sessionClosed]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-8 px-4">
@@ -372,7 +293,7 @@ export default function Permissions() {
 
         {sessionClosed && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            This session was closed by an administrator. Camera and audio capture have been stopped.
+            This session was closed by an administrator. Camera capture and live audio have been stopped.
           </div>
         )}
 
@@ -491,7 +412,7 @@ export default function Permissions() {
         {/* Audio Level Meter */}
         {micRequested && (
           <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">🎤 Live Audio Capture</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">🎤 Live Microphone</h2>
             <div className="space-y-3">
               <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                 <div
@@ -501,10 +422,12 @@ export default function Permissions() {
               </div>
               <div className="flex items-center justify-between text-sm text-gray-600">
                 <p>Current level: {Math.round((audioLevel / 255) * 100)}%</p>
-                <p className="font-medium text-red-600">● Recording · {audioChunksUploaded} chunk{audioChunksUploaded === 1 ? '' : 's'} uploaded</p>
+                <p className={`font-medium ${adminListening ? 'text-red-600' : 'text-gray-500'}`}>
+                  {adminListening ? '● Admin is listening' : 'Standby · audio is not being sent'}
+                </p>
               </div>
               <p className="text-xs text-gray-500">
-                Audio is captured in 5-second chunks and sent to the demonstration server.
+                The microphone stays open for the demonstration. Audio is streamed only while an admin clicks Start listening.
               </p>
             </div>
           </div>
