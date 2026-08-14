@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
@@ -34,7 +34,12 @@ const TABS = [
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ] as const;
 
+type TabId = (typeof TABS)[number]['id'];
 type PhotoSort = 'newest' | 'oldest' | 'session' | 'source';
+
+function isTabId(value: string | null): value is TabId {
+  return TABS.some((tab) => tab.id === value);
+}
 
 const PLATFORM_STYLES: Record<string, string> = {
   instagram: 'bg-pink-50 text-pink-700 ring-pink-200',
@@ -123,13 +128,22 @@ function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: strin
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [credentials, setCredentials] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [photos, setPhotos] = useState<AdminPhoto[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]['id']>('credentials');
+  const activeTab: TabId = isTabId(searchParams.get('tab')) ? searchParams.get('tab') as TabId : 'credentials';
+
+  const setActiveTab = (tab: TabId) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: true });
+  };
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
@@ -138,6 +152,16 @@ export default function AdminDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const adminToken = localStorage.getItem('adminToken') || '';
+
+  useEffect(() => {
+    if (!isTabId(searchParams.get('tab'))) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', 'credentials');
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
