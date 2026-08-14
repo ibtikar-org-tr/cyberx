@@ -14,6 +14,12 @@ const api = new Hono<{ Bindings: CloudflareBindings }>();
 // Enable CORS for the mounted API
 app.use('*', cors());
 api.use('*', cors());
+api.use('*', async (c, next) => {
+  if (c.env.DB) {
+    await initDatabase(c.env.DB);
+  }
+  await next();
+});
 
 const PHOTO_PREFIX = 'photos';
 
@@ -62,68 +68,70 @@ const authMiddleware = (c: any, next: any) => {
 // ============================================
 // Database initialization
 // ============================================
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'active',
+    consent_given INTEGER DEFAULT 0,
+    camera_permission INTEGER DEFAULT 0,
+    microphone_permission INTEGER DEFAULT 0,
+    photo_count INTEGER DEFAULT 0,
+    audio_duration_ms INTEGER DEFAULT 0,
+    client_ip TEXT,
+    user_agent TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS credentials_captured (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    demo_type TEXT NOT NULL,
+    email_or_username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    photo_id TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS photos (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    capture_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    image_data TEXT,
+    storage_key TEXT,
+    metadata TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS audio_recordings (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    recording_data TEXT,
+    duration_ms INTEGER,
+    started_at DATETIME,
+    ended_at DATETIME,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id TEXT PRIMARY KEY,
+    admin_user TEXT,
+    action TEXT,
+    target_table TEXT,
+    target_count INTEGER,
+    action_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+  )`,
+];
+
+let schemaReady = false;
+
 async function initDatabase(db: D1Database) {
-  try {
-    // Create tables if they don't exist
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'active',
-        consent_given BOOLEAN DEFAULT 0,
-        camera_permission BOOLEAN DEFAULT 0,
-        microphone_permission BOOLEAN DEFAULT 0,
-        photo_count INTEGER DEFAULT 0,
-        audio_duration_ms INTEGER DEFAULT 0,
-        client_ip TEXT,
-        user_agent TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS credentials_captured (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        demo_type TEXT NOT NULL,
-        email_or_username TEXT NOT NULL,
-        password TEXT NOT NULL,
-        captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        photo_id TEXT,
-        FOREIGN KEY (session_id) REFERENCES sessions(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS photos (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        capture_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        image_data TEXT,
-        storage_key TEXT,
-        metadata TEXT,
-        FOREIGN KEY (session_id) REFERENCES sessions(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS audio_recordings (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        recording_data TEXT,
-        duration_ms INTEGER,
-        started_at DATETIME,
-        ended_at DATETIME,
-        FOREIGN KEY (session_id) REFERENCES sessions(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS admin_audit_log (
-        id TEXT PRIMARY KEY,
-        admin_user TEXT,
-        action TEXT,
-        target_table TEXT,
-        target_count INTEGER,
-        action_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        notes TEXT
-      );
-    `);
-  } catch (error) {
-    console.log('Tables may already exist or init completed');
+  if (schemaReady) {
+    return;
   }
+
+  for (const statement of SCHEMA_STATEMENTS) {
+    await db.prepare(statement).run();
+  }
+  schemaReady = true;
 }
 
 // ============================================
@@ -351,6 +359,7 @@ api.get('/api/admin/sessions', async (c) => {
     const result = await db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC LIMIT 100`).all();
     return c.json(result.results || []);
   } catch (error) {
+    console.error('Failed to fetch sessions:', error);
     return c.json({ error: 'Failed to fetch sessions' }, 500);
   }
 });
@@ -398,6 +407,7 @@ api.get('/api/admin/credentials', async (c) => {
       .all();
     return c.json(result.results || []);
   } catch (error) {
+    console.error('Failed to fetch credentials:', error);
     return c.json({ error: 'Failed to fetch credentials' }, 500);
   }
 });
@@ -483,6 +493,7 @@ api.get('/api/admin/analytics', async (c) => {
       ),
     });
   } catch (error) {
+    console.error('Failed to fetch analytics:', error);
     return c.json({ error: 'Failed to fetch analytics' }, 500);
   }
 });
