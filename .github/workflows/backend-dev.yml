@@ -44,7 +44,7 @@ jobs:
             --arg dbid0 "${{ vars.CYBERX_DB_ID }}" \
             --arg dbname0 "${{ vars.CYBERX_DB_NAME }}" \
             --arg bucketname "${{ vars.BUCKET_NAME }}" \
-            --arg frontendBaseUrl "${{ vars.FRONTEND_BASE_URL }}" \
+            --arg frontendBaseUrl "${{ vars.BASE_URL }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc
 

@@ -30,7 +30,7 @@ jobs:
 
       - name: Build project
         env:
-          VITE_API_URL: ${{ vars.FRONTEND_BASE_URL }} # same as backend base url
+          VITE_API_URL: ${{ vars.BASE_URL }} # same as backend base url
         run: npm run build
 
       - name: Install Wrangler
