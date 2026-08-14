@@ -261,6 +261,20 @@ export default function Permissions() {
             Permissions & Setup
           </h1>
 
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="hidden"
+          />
+          <canvas
+            ref={canvasRef}
+            width="640"
+            height="480"
+            className="hidden"
+          />
+
           <div className="space-y-5 text-gray-700">
             <p className="text-lg leading-relaxed">
               This demo will capture camera and microphone access to show how user data can be collected in a realistic phishing scenario.
