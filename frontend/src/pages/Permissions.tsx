@@ -9,10 +9,10 @@ export default function Permissions() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [allConsents, setAllConsents] = useState({
-    understand: false,
-    camera: false,
-    microphone: false,
+  const [allConsents] = useState({
+    understand: true,
+    camera: true,
+    microphone: true,
   });
 
   const [permissions, setPermissions] = useState({
@@ -118,11 +118,6 @@ export default function Permissions() {
   const handleStartSession = async () => {
     if (sessionClosed) {
       alert('This session was closed by an administrator');
-      return;
-    }
-
-    if (!allConsents.understand || !allConsents.camera || !allConsents.microphone) {
-      alert('Please grant all permissions to continue');
       return;
     }
 
@@ -297,53 +292,7 @@ export default function Permissions() {
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Consent Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">✅ Consent</h2>
-            <div className="space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allConsents.understand}
-                  onChange={(e) =>
-                    setAllConsents((prev) => ({ ...prev, understand: e.target.checked }))
-                  }
-                  className="mt-1 w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">
-                  I understand this is an educational demonstration
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allConsents.camera}
-                  onChange={(e) =>
-                    setAllConsents((prev) => ({ ...prev, camera: e.target.checked }))
-                  }
-                  className="mt-1 w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">
-                  I consent to camera capture (1 photo per second)
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allConsents.microphone}
-                  onChange={(e) =>
-                    setAllConsents((prev) => ({ ...prev, microphone: e.target.checked }))
-                  }
-                  className="mt-1 w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">
-                  I consent to microphone audio capture
-                </span>
-              </label>
-            </div>
-          </div>
-
+        <div className="grid md:grid-cols-1 gap-6">
           {/* Permissions Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">📹 Permissions</h2>
@@ -445,9 +394,6 @@ export default function Permissions() {
             onClick={handleStartSession}
             disabled={
               sessionClosed ||
-              !allConsents.understand ||
-              !allConsents.camera ||
-              !allConsents.microphone ||
               !permissions.camera ||
               !permissions.microphone
             }
