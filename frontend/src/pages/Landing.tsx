@@ -105,6 +105,20 @@ export default function Landing() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-6">Available Demonstrations</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <button
+              onClick={() => {
+                if (!consentChecked) {
+                  alert('Please accept the consent agreement to continue');
+                  return;
+                }
+                navigate('/access');
+              }}
+              className="p-4 bg-white rounded-lg shadow hover:shadow-lg transition transform hover:scale-105 text-center border border-purple-200"
+            >
+              <div className="text-4xl mb-2">🔐</div>
+              <p className="font-semibold text-gray-900">Access</p>
+            </button>
+
             {demoApps.map((app) => (
               <button
                 key={app.id}
@@ -127,23 +141,14 @@ export default function Landing() {
 
         {/* Start Demo Button */}
         <div className="text-center">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={handleStartDemo}
-              className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-lg font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!consentChecked}
-            >
-              <LogIn size={24} />
-              Start Demo
-            </button>
-            <button
-              onClick={() => navigate('/access')}
-              className="flex items-center justify-center gap-2 px-8 py-4 bg-white text-purple-700 border border-purple-200 text-lg font-bold rounded-lg hover:bg-purple-50 transition"
-            >
-              <Shield size={24} />
-              Access Page
-            </button>
-          </div>
+          <button
+            onClick={handleStartDemo}
+            className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-lg font-bold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!consentChecked}
+          >
+            <LogIn size={24} />
+            Start Demo
+          </button>
           {!consentChecked && (
             <p className="text-sm text-gray-600 mt-2">
               Please accept the consent agreement to proceed
