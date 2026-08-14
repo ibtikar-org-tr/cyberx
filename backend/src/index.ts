@@ -14,7 +14,6 @@ const api = new Hono<{ Bindings: CloudflareBindings }>();
 // Enable CORS for the mounted API
 app.use('*', cors());
 api.use('*', cors());
-app.route('/ms/cyberz', api);
 
 const PHOTO_PREFIX = 'photos';
 
@@ -589,5 +588,7 @@ api.get('/health', (c) => {
 api.get('/', (c) => {
   return c.json({ message: 'CyberX Backend API', version: '1.0.0' });
 });
+
+app.route('/ms/cyberz', api);
 
 export default app;
