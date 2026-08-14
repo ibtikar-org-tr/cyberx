@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, RefreshCw, Trash2, Download } from 'lucide-react';
+import { LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import { getApiUrl } from '../../api';
 
 export default function AdminDashboard() {
@@ -76,26 +76,6 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Delete failed:', error);
-    }
-  };
-
-  const handleExport = async () => {
-    const token = localStorage.getItem('adminToken');
-    try {
-      const response = await fetch(getApiUrl('/api/admin/export'), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cyberx-data-${new Date().toISOString()}.json`;
-        a.click();
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
     }
   };
 
@@ -296,13 +276,6 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Data Management</h2>
           <div className="flex gap-4">
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              <Download size={20} />
-              Export Data
-            </button>
             <button
               onClick={handleDeleteAllData}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg transition ${
