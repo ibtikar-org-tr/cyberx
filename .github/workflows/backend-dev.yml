@@ -50,10 +50,10 @@ jobs:
       - name: Deploy to Cloudflare Workers
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler.local.jsonc --name {{ vars.THIS_APP_NAME_BE }}
+        run: wrangler deploy --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
 
       - name: Set secrets in Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "${{ secrets.ADMIN_PASSWORD }}" | wrangler secret put ADMIN_PASSWORD --config wrangler.local.jsonc --name {{ vars.THIS_APP_NAME_BE }}
+          echo "${{ secrets.ADMIN_PASSWORD }}" | wrangler secret put ADMIN_PASSWORD --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
