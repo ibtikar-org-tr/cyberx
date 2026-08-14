@@ -377,6 +377,77 @@ api.get('/api/admin/credentials', async (c) => {
   }
 });
 
+api.get('/api/admin/photos', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `SELECT id, session_id, storage_key, metadata, capture_timestamp
+         FROM photos
+         ORDER BY capture_timestamp DESC
+         LIMIT 200`
+      )
+      .all();
+    return c.json(result.results || []);
+  } catch (error) {
+    console.error('Failed to fetch photos:', error);
+    return c.json({ error: 'Failed to fetch photos' }, 500);
+  }
+});
+
+api.get('/api/admin/photos/:id/image', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '') || c.req.query('token');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const photoId = c.req.param('id');
+
+  try {
+    const photo = await db
+      .prepare(`SELECT storage_key, image_data FROM photos WHERE id = ?`)
+      .bind(photoId)
+      .first<{ storage_key: string | null; image_data: string | null }>();
+
+    if (!photo) {
+      return c.json({ error: 'Photo not found' }, 404);
+    }
+
+    const objectKey =
+      photo.storage_key ||
+      (photo.image_data?.startsWith(`${PHOTO_PREFIX}/`) ? photo.image_data : null);
+
+    if (objectKey) {
+      const object = await c.env.BUCKET.get(objectKey);
+      if (!object) {
+        return c.json({ error: 'Photo file not found' }, 404);
+      }
+
+      return c.body(object.body, 200, {
+        'Content-Type': object.httpMetadata?.contentType || 'image/png',
+        'Cache-Control': 'private, max-age=300',
+      });
+    }
+
+    if (photo.image_data?.startsWith('data:image/')) {
+      return c.json({ error: 'Photo is incomplete' }, 404);
+    }
+
+    return c.json({ error: 'Photo file not found' }, 404);
+  } catch (error) {
+    console.error('Failed to fetch photo image:', error);
+    return c.json({ error: 'Failed to fetch photo image' }, 500);
+  }
+});
+
 api.get('/api/admin/photos/:session_id', async (c) => {
   const db = c.env.DB;
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
@@ -389,7 +460,12 @@ api.get('/api/admin/photos/:session_id', async (c) => {
 
   try {
     const result = await db
-      .prepare(`SELECT * FROM photos WHERE session_id = ?`)
+      .prepare(
+        `SELECT id, session_id, storage_key, metadata, capture_timestamp
+         FROM photos
+         WHERE session_id = ?
+         ORDER BY capture_timestamp DESC`
+      )
       .bind(sessionId)
       .all();
     return c.json(result.results || []);
