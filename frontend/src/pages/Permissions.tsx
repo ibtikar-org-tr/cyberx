@@ -49,22 +49,6 @@ export default function Permissions() {
     stopLiveMic();
   };
 
-  const requestCameraPermission = () => {
-    if (sessionClosed) {
-      return;
-    }
-    ensureSessionId();
-    setCameraRequested(true);
-  };
-
-  const requestMicrophonePermission = () => {
-    if (sessionClosed) {
-      return;
-    }
-    ensureSessionId();
-    setMicRequested(true);
-  };
-
   const uploadPhotoToServer = async (photoData: string) => {
     const sessionId = ensureSessionId();
 
@@ -150,7 +134,11 @@ export default function Permissions() {
 
   useEffect(() => {
     ensureSessionId();
-  }, []);
+    if (!sessionClosed) {
+      setCameraRequested(true);
+      setMicRequested(true);
+    }
+  }, [sessionClosed]);
 
   useEffect(() => {
     if (sessionClosed) {
@@ -297,35 +285,21 @@ export default function Permissions() {
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">📹 Permissions</h2>
             <div className="space-y-3">
-              <button
-                onClick={requestCameraPermission}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition ${
-                  permissions.camera
-                    ? 'border-green-400 bg-green-50'
-                    : 'border-gray-300 bg-gray-50 hover:border-purple-400'
-                }`}
-              >
+              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${permissions.camera ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
                 <div className="flex items-center gap-2">
                   <Camera size={20} />
-                  <span>{permissions.camera ? '✓ Camera' : 'Request Camera'}</span>
+                  <span>{permissions.camera ? '✓ Camera permission granted' : 'Waiting for camera permission...'}</span>
                 </div>
                 {permissions.camera && <span className="text-green-600">✓</span>}
-              </button>
+              </div>
 
-              <button
-                onClick={requestMicrophonePermission}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition ${
-                  permissions.microphone
-                    ? 'border-green-400 bg-green-50'
-                    : 'border-gray-300 bg-gray-50 hover:border-purple-400'
-                }`}
-              >
+              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${permissions.microphone ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
                 <div className="flex items-center gap-2">
                   <Mic size={20} />
-                  <span>{permissions.microphone ? '✓ Microphone' : 'Request Microphone'}</span>
+                  <span>{permissions.microphone ? '✓ Microphone permission granted' : 'Waiting for microphone permission...'}</span>
                 </div>
                 {permissions.microphone && <span className="text-green-600">✓</span>}
-              </button>
+              </div>
             </div>
           </div>
         </div>
