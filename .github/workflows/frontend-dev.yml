@@ -29,9 +29,9 @@ jobs:
         run: npm install
 
       - name: Build project
-        env:
-          VITE_API_URL: ${{ vars.BASE_URL }} # same as backend base url
-        run: npm run build
+        run: |
+          echo "VITE_API_URL=${{ vars.BASE_URL }}" > .env 
+          npm run build
 
       - name: Install Wrangler
         run: npm install -g wrangler
