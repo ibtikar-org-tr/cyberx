@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { Github, Shield, LogIn, Lock } from 'lucide-react';
+import { Code, Shield, LogIn, Lock } from 'lucide-react';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -33,7 +33,7 @@ export default function Landing() {
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-4 py-2 bg-white text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
         >
-          <Github size={20} />
+          <Code size={20} />
           Source Code
         </a>
         <button
@@ -176,7 +176,7 @@ export default function Landing() {
             rel="noopener noreferrer"
             className="mt-3 inline-flex items-center gap-2 text-purple-700 hover:underline"
           >
-            <Github size={16} />
+            <Code size={16} />
             View source on GitHub
           </a>
         </div>
