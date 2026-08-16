@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { Code, Shield, LogIn, Lock } from 'lucide-react';
+import { Code, Shield, LogIn, Lock, QrCode } from 'lucide-react';
+import SiteQrCode from '../components/SiteQrCode';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -163,6 +164,18 @@ export default function Landing() {
               Please accept the consent agreement to proceed
             </p>
           )}
+        </div>
+
+        {/* Scan to open */}
+        <div className="mt-12 flex flex-col items-center rounded-lg bg-white p-6 shadow-lg">
+          <div className="mb-3 flex items-center gap-2 text-gray-900">
+            <QrCode size={22} className="text-purple-600" />
+            <h2 className="text-xl font-bold">Scan to open</h2>
+          </div>
+          <p className="mb-5 max-w-md text-center text-sm text-gray-600">
+            Point your phone camera at this QR code to open CyberX on your device
+          </p>
+          <SiteQrCode size={200} />
         </div>
 
         {/* Footer Info */}
