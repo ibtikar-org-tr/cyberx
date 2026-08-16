@@ -1,10 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { Shield, LogIn, Lock } from 'lucide-react';
+import { Shield, LogIn, Lock, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function Landing() {
   const navigate = useNavigate();
   const [consentChecked, setConsentChecked] = useState(false);
+
+  const configuredUrl = (import.meta.env.VITE_SITE_URL as string | undefined)?.trim();
+  const siteUrl = configuredUrl
+    ? configuredUrl.replace(/\/$/, '')
+    : window.location.origin;
 
   const demoApps = [
     { id: 'instagram', name: 'Instagram', path: '/instagram', icon: '📷' },
@@ -140,6 +146,27 @@ export default function Landing() {
               Please accept the consent agreement to proceed
             </p>
           )}
+        </div>
+
+        {/* QR Code — scan to open this site on a phone */}
+        <div className="mt-12 flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2 text-gray-800">
+            <QrCode size={22} className="text-purple-600" />
+            <h2 className="text-lg font-semibold">Scan to open CyberX</h2>
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-lg">
+            <QRCodeSVG
+              value={siteUrl}
+              size={180}
+              level="M"
+              marginSize={2}
+              title={`QR code linking to ${siteUrl}`}
+            />
+          </div>
+          <p className="max-w-sm text-center text-sm text-gray-600">
+            Point your phone camera at the code to open this site
+          </p>
+          <p className="break-all text-center text-xs text-gray-500">{siteUrl}</p>
         </div>
 
         {/* Footer Info */}
